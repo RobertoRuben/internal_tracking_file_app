@@ -119,6 +119,7 @@ class DepartmentResource extends Resource
     {
         return [
             'index' => Pages\ManageDepartments::route('/'),
+            'view' => Pages\ViewDepartment::route('/{record}'),
         ];
     }
 }
