@@ -19,6 +19,13 @@ class Employee extends Model
         'department_id'
     ];
 
+    protected $appends = ['full_name'];
+
+    public function getFullNameAttribute(): string
+    {
+        return "{$this->names} {$this->paternal_surname} {$this->maternal_surname}";
+    }
+
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
