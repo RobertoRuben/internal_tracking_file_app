@@ -8,6 +8,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 class DocumentsRelationManager extends RelationManager
 {
@@ -67,10 +68,14 @@ class DocumentsRelationManager extends RelationManager
             ])
             ->filters([
                 //
-            ])
-            ->headerActions([
+            ])            ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Crear documento'),
+                    ->label('Crear documento')
+                    ->mutateFormDataUsing(function (array $data): array {
+                        $data['registered_by_user_id'] = Auth::id();
+                        $data['created_by_department_id'] = Auth::user()->employee->department_id ?? null;
+                        return $data;
+                    }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()

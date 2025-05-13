@@ -1,0 +1,442 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\DocumentResource\Pages;
+use App\Filament\Resources\DocumentResource\RelationManagers;
+use App\Models\Document;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Notifications\Notification;
+use Filament\Notifications\Actions\Action as NotificationAction;
+use App\Filament\Resources\DocumentResource\RelationManagers\DerivationsRelationManager;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+
+class DocumentResource extends Resource
+{
+    protected static ?string $model = Document::class;
+
+    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+
+    protected static ?string $modelLabel = 'Documento';
+
+    protected static ?string $pluralModelLabel = 'Documentos';
+
+    protected static ?string $navigationGroup = 'Gestión documental';
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Section::make('Información del documento')
+                    ->description('Datos básicos del documento')
+                    ->icon('heroicon-o-document-text')
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->label('Nombre del documento')
+                            ->required()
+                            ->minLength(3)
+                            ->maxLength(255)
+                            ->placeholder('Ingrese el nombre del documento')
+                            ->validationMessages([
+                                'required' => 'El nombre del documento es obligatorio.',
+                                'min' => 'El nombre debe tener al menos 3 caracteres.',
+                                'max' => 'El nombre no debe exceder los 255 caracteres.'
+                            ]),
+                        Forms\Components\TextInput::make('pages')
+                            ->label('Número de páginas')
+                            ->required()
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(1000)
+                            ->placeholder('Ingrese el número de páginas')
+                            ->validationMessages([
+                                'required' => 'El número de páginas es obligatorio.',
+                                'numeric' => 'El número de páginas debe ser numérico.',
+                                'min' => 'El documento debe tener al menos 1 página.',
+                                'max' => 'El documento no puede exceder las 1000 páginas.'
+                            ]),
+                    ]),
+
+                Forms\Components\Section::make('Detalles del documento')
+                    ->description('Contenido y asunto del documento')
+                    ->icon('heroicon-o-clipboard-document-list')
+                    ->schema([
+                        Forms\Components\Textarea::make('subject')
+                            ->label('Asunto')
+                            ->required()
+                            ->minLength(5)
+                            ->maxLength(1000)
+                            ->placeholder('Ingrese el asunto del documento')
+                            ->validationMessages([
+                                'required' => 'El asunto es obligatorio.',
+                                'min' => 'El asunto debe tener al menos 5 caracteres.',
+                                'max' => 'El asunto no debe exceder los 1000 caracteres.'
+                            ])
+                            ->columnSpanFull(),
+                        Forms\Components\FileUpload::make('path')
+                            ->label('Archivo')
+                            ->required()
+                            ->disk('public')
+                            ->directory('documentos')
+                            ->acceptedFileTypes(['application/pdf'])
+                            ->maxSize(10240) // 10MB
+                            ->openable() // Permitir abrir en lugar de descargar
+                            ->validationMessages([
+                                'required' => 'El archivo es obligatorio.',
+                                'max' => 'El archivo no debe exceder los 10MB.',
+                                'mimes' => 'El archivo debe ser un PDF.'
+                            ])
+                            ->columnSpanFull(),
+                    ]),
+
+                // Campos ocultos para usuario y departamento
+                Forms\Components\Hidden::make('registered_by_user_id')
+                    ->default(fn() => Auth::id())
+                    ->required(),
+                Forms\Components\Hidden::make('created_by_department_id')
+                    ->default(function () {
+                        return Auth::user()->employee->department_id ?? null;
+                    })->required(),
+
+                Forms\Components\Section::make('Información del remitente')
+                    ->description('Datos del empleado que remite el documento')
+                    ->icon('heroicon-o-user-circle')
+                    ->schema([
+                        Forms\Components\Select::make('employee_id')
+                            ->label('Empleado remitente')
+                            ->relationship('employee', 'names', fn(Builder $query) => $query->where('is_active', true))
+                            ->getOptionLabelFromRecordUsing(fn($record) => "{$record->names} {$record->paternal_surname} {$record->maternal_surname}")
+                            ->required()
+                            ->searchable(['names', 'paternal_surname', 'maternal_surname', 'dni'])
+                            ->preload()
+                            ->placeholder('Seleccione un empleado')
+                            ->validationMessages([
+                                'required' => 'Debe seleccionar un empleado.'
+                            ]),
+                        // Campo is_derived oculto y siempre false por defecto
+                        Forms\Components\Hidden::make('is_derived')
+                            ->default(false),
+                    ]),
+            ]);
+    }
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('doc_code')
+                    ->label('Código')
+                    ->searchable()
+                    ->sortable()
+                    ->copyable()
+                    ->copyMessage('Código copiado al portapapeles'),
+                Tables\Columns\TextColumn::make('registration_number')
+                    ->label('N° de registro')
+                    ->formatStateUsing(fn($state) => str_pad($state, 11, '0', STR_PAD_LEFT))
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Nombre')
+                    ->searchable()
+                    ->limit(30)
+                    ->tooltip(fn(Document $record): string => $record->name),
+                Tables\Columns\TextColumn::make('subject')
+                    ->label('Asunto')
+                    ->searchable()
+                    ->limit(30)
+                    ->toggleable()
+                    ->tooltip(fn(Document $record): string => $record->subject),
+                Tables\Columns\TextColumn::make('pages')
+                    ->label('Páginas')
+                    ->numeric()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('employee.full_name')
+                    ->label('Empleado remitente')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('creatorDepartment.name')
+                    ->label('Departamento origen')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('registeredBy.name')
+                    ->label('Registrado por')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Fecha de registro')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable(),                Tables\Columns\IconColumn::make('is_derived')
+                    ->label('Derivado')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->tooltip(fn(bool $state): string => $state ? 'Documento derivado' : 'Documento no derivado'),
+                Tables\Columns\BadgeColumn::make('document_relation')
+                    ->label('Relación')
+                    ->getStateUsing(function (Document $record) {
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if (!$userDepartmentId) {
+                            return 'Sin departamento';
+                        }
+                        
+                        // Verificar si fue creado por el departamento del usuario
+                        if ($record->created_by_department_id === $userDepartmentId) {
+                            return 'creado';
+                        }
+                        
+                        // Verificar si fue derivado por el departamento del usuario
+                        $derivatedByUs = $record->derivations()
+                            ->where('origin_department_id', $userDepartmentId)
+                            ->exists();
+                            
+                        if ($derivatedByUs) {
+                            return 'derivado';
+                        }
+                        
+                        // Verificar si fue recibido por el departamento del usuario
+                        $receivedByUs = $record->derivations()
+                            ->where('destination_department_id', $userDepartmentId)
+                            ->exists();
+                            
+                        if ($receivedByUs) {
+                            return 'recibido';
+                        }
+                        
+                        return 'otro';
+                    })
+                    ->colors([
+                        'primary' => 'creado',
+                        'warning' => 'derivado',
+                        'success' => 'recibido',
+                        'danger' => 'otro',
+                    ]),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Fecha de registro')
+                    ->dateTime('d/m/Y H:i')
+                    ->timezone('America/Lima')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Última actualización')
+                    ->dateTime('d/m/Y H:i')
+                    ->timezone('America/Lima')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+->filters([
+                Tables\Filters\SelectFilter::make('employee_id')
+                    ->label('Empleado remitente')
+                    ->relationship('employee', 'names', fn(Builder $query) => $query->where('is_active', true))
+                    ->getOptionLabelFromRecordUsing(fn($record) => "{$record->names} {$record->paternal_surname} {$record->maternal_surname}")
+                    ->searchable()
+                    ->preload(),
+                Tables\Filters\SelectFilter::make('created_by_department_id')
+                    ->label('Departamento de origen')
+                    ->relationship('creatorDepartment', 'name')
+                    ->searchable()
+                    ->preload(),
+                Tables\Filters\SelectFilter::make('registered_by_user_id')
+                    ->label('Registrado por')
+                    ->relationship('registeredBy', 'name')
+                    ->searchable()
+                    ->preload(),
+                Tables\Filters\TernaryFilter::make('is_derived')
+                    ->label('Estado de derivación')
+                    ->placeholder('Todos')
+                    ->trueLabel('Derivados')
+                    ->falseLabel('No derivados'),
+                Tables\Filters\SelectFilter::make('document_relation')
+                    ->label('Relación con documento')
+                    ->options([
+                        'created' => 'Creados por mi departamento',
+                        'received' => 'Recibidos por mi departamento',
+                        'derived' => 'Derivados por mi departamento',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if (empty($data['value'])) {
+                            return $query;
+                        }
+                        
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if (!$userDepartmentId) {
+                            return $query;
+                        }
+                        
+                        return match ($data['value']) {
+                            'created' => $query->where('created_by_department_id', $userDepartmentId),
+                            'received' => $query->whereHas('derivations', function (Builder $query) use ($userDepartmentId) {
+                                $query->where('destination_department_id', $userDepartmentId);
+                            }),
+                            'derived' => $query->whereHas('derivations', function (Builder $query) use ($userDepartmentId) {
+                                $query->where('origin_department_id', $userDepartmentId);
+                            }),
+                            default => $query,
+                        };
+                    }),
+            ])
+            ->actions([
+                Tables\Actions\ViewAction::make()
+                    ->label('Ver'),
+                Tables\Actions\EditAction::make()
+                    ->label('Editar'),                Tables\Actions\Action::make('download')
+                    ->label('Ver documento')
+                    ->icon('heroicon-o-document-text')
+                    ->color('success')
+                    ->url(function (Document $record) {
+                        return asset('storage/' . $record->path);
+                    })
+                    ->openUrlInNewTab()
+                    ->visible(fn(Document $record) => $record->path && Storage::disk('public')->exists($record->path)),
+                Tables\Actions\Action::make('derivar')
+                    ->label('Derivar')
+                    ->icon('heroicon-o-arrow-right-circle')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Derivar documento')
+                    ->modalDescription('¿Está seguro que desea derivar este documento?')
+                    ->modalSubmitActionLabel('Sí, derivar')->modalCancelActionLabel('No, cancelar')
+                    ->action(function (Document $record) {
+                        $record->update(['is_derived' => true]);
+                    }),
+                Tables\Actions\DeleteAction::make()
+                    ->label('Eliminar')
+                    ->requiresConfirmation()
+                    ->modalHeading('Eliminar documento')
+                    ->modalDescription('¿Está seguro que desea eliminar este documento? Esta acción no se puede deshacer y también eliminará el archivo físico asociado.')
+                    ->modalSubmitActionLabel('Sí, eliminar')
+                    ->modalCancelActionLabel('No, cancelar')->successNotification(
+                        Notification::make()
+                            ->success()
+                            ->title('Documento eliminado')
+                            ->body('El documento y su archivo físico han sido eliminados correctamente.')
+                    ),
+            ])
+->bulkActions([
+                Tables\Actions\BulkActionGroup::make([                    Tables\Actions\BulkAction::make('downloadMultiple')
+                        ->label('Descargar seleccionados')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->color('success')
+                        ->action(function (\Illuminate\Support\Collection $records) {
+                            // Verificar que todos los archivos existen antes de iniciar la descarga
+                            $validRecords = $records->filter(function ($record) {
+                                return $record->path && Storage::disk('public')->exists($record->path);
+                            });
+                            if ($validRecords->count() === 0) {
+                                Notification::make()
+                                    ->title('Error de descarga')
+                                    ->body('No se encontraron archivos válidos para descargar.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            } 
+                            
+                            // Si es solo un documento, descargarlo directamente
+                            if ($validRecords->count() === 1) {
+                                $document = $validRecords->first();
+                                $filePath = storage_path('app/public/' . $document->path);
+                                
+                                if (file_exists($filePath)) {
+                                    $filename = 'Documento_' . $document->registration_number . '_' . $document->name . '.pdf';
+                                    return response()->download($filePath, $filename, [
+                                        'Content-Type' => 'application/pdf',
+                                    ]);
+                                } else {
+                                    Notification::make()
+                                        ->title('Error de descarga')
+                                        ->body('No se pudo encontrar el archivo para descargar.')
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+                            }
+                            
+                            // Para múltiples documentos, crear un archivo ZIP
+                            $zipFileName = 'documentos_' . date('Y-m-d_H-i-s') . '.zip';
+                            $zipFilePath = storage_path('app/temp/' . $zipFileName);
+
+                            // Asegurar que exista el directorio temporal
+                            if (!file_exists(storage_path('app/temp'))) {
+                                mkdir(storage_path('app/temp'), 0755, true);
+                            }
+
+                            $zip = new \ZipArchive();
+                            if ($zip->open($zipFilePath, \ZipArchive::CREATE) !== true) {
+                                Notification::make()
+                                    ->title('Error de descarga')
+                                    ->body('No se pudo crear el archivo ZIP.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+
+                            // Añadir cada documento al ZIP
+                            foreach ($validRecords as $document) {
+                                $filePath = storage_path('app/public/' . $document->path);
+                                $relativeName = 'Documento_' . $document->registration_number . '_' . $document->name . '.pdf';
+
+                                if (file_exists($filePath)) {
+                                    $zip->addFile($filePath, $relativeName);
+                                }
+                            }
+
+                            $zip->close();
+
+                            // Devolver el archivo ZIP para descarga
+                            return response()->download($zipFilePath, $zipFileName, [
+                                'Content-Type' => 'application/zip',
+                            ])->deleteFileAfterSend(true);
+                        }),
+                    Tables\Actions\BulkAction::make('markAsDerived')
+                        ->label('Marcar como derivados')
+                        ->icon('heroicon-o-arrow-right-circle')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalHeading('Derivar documentos seleccionados')
+                        ->modalDescription('¿Está seguro que desea marcar los documentos seleccionados como derivados?')
+                        ->modalSubmitActionLabel('Sí, derivar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->action(function (\Illuminate\Support\Collection $records) {
+                            $records->each(function ($record) {
+                                $record->update(['is_derived' => true]);
+                            });
+                        }),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->label('Eliminar seleccionados')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar documentos seleccionados')
+                        ->modalDescription('¿Está seguro que desea eliminar los documentos seleccionados? Esta acción no se puede deshacer y también eliminará los archivos físicos asociados.')
+                        ->modalSubmitActionLabel('Sí, eliminar seleccionados')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->successNotification(
+                            Notification::make()
+                                ->success()
+                                ->title('Documentos eliminados')
+                                ->body('Los documentos y sus archivos físicos han sido eliminados correctamente.')
+                        ),
+                ]),
+            ]);
+    }
+    public static function getRelations(): array
+    {
+        return [
+            DerivationsRelationManager::class,
+        ];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ManageDocuments::route('/'),
+            'view' => Pages\ViewDocument::route('/{record}'),
+        ];
+    }
+}
