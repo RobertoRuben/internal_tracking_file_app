@@ -16,6 +16,31 @@ class Derivation extends Model
         'status',
     ];
 
+    protected static function booted(): void
+    {
+        // Cuando se crea una nueva derivación, actualizar el estado del documento a "derivado"
+        static::created(function (Derivation $derivation) {
+            if ($derivation->document) {
+                $derivation->document->update(['is_derived' => true]);
+            }
+        });
+        
+        // Cuando se elimina una derivación, actualizar el estado del documento a "no derivado"
+        static::deleted(function (Derivation $derivation) {
+            if ($derivation->document) {
+                // Verificar si el documento aún tiene otras derivaciones activas
+                $hasOtherDerivations = $derivation->document->derivations()
+                    ->where('id', '!=', $derivation->id)
+                    ->exists();
+                
+                // Si no tiene otras derivaciones, marcarlo como no derivado
+                if (!$hasOtherDerivations) {
+                    $derivation->document->update(['is_derived' => false]);
+                }
+            }
+        });
+    }
+
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);
