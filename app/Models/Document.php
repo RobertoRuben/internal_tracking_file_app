@@ -42,6 +42,11 @@ class Document extends Model
     {
         return $this->hasMany(Derivation::class);
     }
+    
+    public function chargeBooks(): HasMany
+    {
+        return $this->hasMany(ChargeBook::class);
+    }
 
     /**
      * Obtiene el estado de derivación del documento para un departamento específico

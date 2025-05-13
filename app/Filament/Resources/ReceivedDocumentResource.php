@@ -210,6 +210,90 @@ class ReceivedDocumentResource extends Resource
                             ->where('status', 'Enviado')
                             ->exists();
                     }),
+                Tables\Actions\Action::make('registerInChargeBook')
+                    ->label('Registrar en cuaderno de cargos')
+                    ->icon('heroicon-o-book-open')
+                    ->color('primary')
+                    ->form([
+                        Forms\Components\Select::make('sender_department_id')
+                            ->label('Departamento remitente')
+                            ->relationship('creatorDepartment', 'name')
+                            ->disabled()
+                            ->dehydrated(true)
+                            ->required(),
+                        Forms\Components\Select::make('sender_user_id')
+                            ->label('Usuario remitente')
+                            ->relationship('creator', 'name')
+                            ->disabled()
+                            ->dehydrated(true)
+                            ->required(),
+                        Forms\Components\Textarea::make('notes')
+                            ->label('Observaciones')
+                            ->placeholder('Ingrese cualquier observación o nota sobre el documento recibido.'),
+                    ])
+                    ->action(function (Document $record, array $data) {
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if (!$userDepartmentId) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Error')
+                                ->body('No se pudo determinar su departamento.')
+                                ->send();
+                            return;
+                        }
+                        
+                        try {
+                            // Crear registro en el cuaderno de cargos
+                            $chargeBook = \App\Models\ChargeBook::create([
+                                'document_id' => $record->id,
+                                'sender_department_id' => $data['sender_department_id'],
+                                'sender_user_id' => $data['sender_user_id'],
+                                'notes' => $data['notes'] ?? null,
+                                // Estos campos se asignan automáticamente en el booted del modelo
+                                // 'receiver_user_id' => Auth::id(),
+                                // 'department_id' => $userDepartmentId,
+                                // 'registration_number' => $nextNumber
+                            ]);
+                            
+                            Notification::make()
+                                ->success()
+                                ->title('Documento registrado')
+                                ->body('El documento ha sido registrado correctamente en el cuaderno de cargos con el número: ' . str_pad($chargeBook->registration_number, 8, '0', STR_PAD_LEFT))
+                                ->send();
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Error al registrar')
+                                ->body('No se pudo registrar el documento en el cuaderno de cargos: ' . $e->getMessage())
+                                ->send();
+                        }
+                    })
+                    ->visible(function (Document $record) {
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if (!$userDepartmentId) {
+                            return false;
+                        }
+                        
+                        // Verificar si el documento ya está registrado en el cuaderno de cargos de este departamento
+                        $existsInChargeBook = \App\Models\ChargeBook::where('document_id', $record->id)
+                            ->where('department_id', $userDepartmentId)
+                            ->exists();
+                        
+                        // Verificar si hay una derivación recibida (no solo pendiente)
+                        $isReceived = $record->derivations()
+                            ->where('destination_department_id', $userDepartmentId)
+                            ->where('status', 'Recibido')
+                            ->exists();
+                        
+                        return $isReceived && !$existsInChargeBook;
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading('Registrar en cuaderno de cargos')
+                    ->modalDescription('Al confirmar, este documento será registrado en el cuaderno de cargos de su departamento con un número secuencial automático.')
+                    ->modalSubmitActionLabel('Registrar documento')
+                    ->modalCancelActionLabel('Cancelar'),
                 Tables\Actions\Action::make('rejectDocument')
                     ->label('Rechazar')
                     ->icon('heroicon-o-x-circle')
