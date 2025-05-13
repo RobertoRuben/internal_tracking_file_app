@@ -43,6 +43,23 @@ class Document extends Model
         return $this->hasMany(Derivation::class);
     }
 
+    /**
+     * Obtiene el estado de derivación del documento para un departamento específico
+     * 
+     * @param int $departmentId ID del departamento a verificar
+     * @return string|null Estado de la derivación ('Enviado', 'Recibido', 'Rechazado') o null si no existe
+     */
+    public function getDerivationStatusForDepartment(int $departmentId): ?string
+    {
+        // Obtener la última derivación dirigida a este departamento
+        $derivation = $this->derivations()
+            ->where('destination_department_id', $departmentId)
+            ->latest()
+            ->first();
+            
+        return $derivation ? $derivation->status : null;
+    }
+
     protected static function booted(): void
     {
         static::creating(function (Document $doc) {
