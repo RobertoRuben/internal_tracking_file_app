@@ -65,15 +65,18 @@ class ReceivedDocumentResource extends Resource
                     ->label('Asunto')
                     ->searchable()
                     ->limit(30)
-                    ->tooltip(fn(Document $record): string => $record->subject),
+                    ->tooltip(fn(Document $record): string => $record->subject)
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('creatorDepartment.name')
                     ->label('Origen')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('employee.full_name')
                     ->label('Enviado por')
                     ->searchable()
-                    ->sortable(),                
+                    ->sortable()
+                    ->toggleable(),                
                 Tables\Columns\BadgeColumn::make('derivation_status')
                     ->label('Estado')
                     ->getStateUsing(function (Document $record) {
@@ -128,7 +131,6 @@ class ReceivedDocumentResource extends Resource
                         
                         return $derivation->created_at->format('d/m/Y H:i');
                     })
-                    // Simplificamos el sortable para evitar el error
                     ->sortable()
                     ->searchable(false),
                 Tables\Columns\TextColumn::make('created_at')
@@ -171,6 +173,50 @@ class ReceivedDocumentResource extends Resource
                                     $detailsQuery->where('status', $status);
                                 });
                         });
+                    }),
+                Tables\Filters\Filter::make('derivation_date')
+                    ->label('Fecha de envío')
+                    ->form([
+                        Forms\Components\DatePicker::make('date_from')
+                            ->label('Desde'),
+                        Forms\Components\DatePicker::make('date_until')
+                            ->label('Hasta'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        return $query
+                            ->when(
+                                $data['date_from'],
+                                fn (Builder $query, $date): Builder => $query->whereHas(
+                                    'derivations',
+                                    fn (Builder $query) => $query
+                                        ->where('destination_department_id', $userDepartmentId)
+                                        ->whereDate('created_at', '>=', $date)
+                                )
+                            )
+                            ->when(
+                                $data['date_until'],
+                                fn (Builder $query, $date): Builder => $query->whereHas(
+                                    'derivations',
+                                    fn (Builder $query) => $query
+                                        ->where('destination_department_id', $userDepartmentId)
+                                        ->whereDate('created_at', '<=', $date)
+                                )
+                            );
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+                        
+                        if ($data['date_from'] ?? null) {
+                            $indicators['date_from'] = 'Enviados desde: ' . $data['date_from'];
+                        }
+                        
+                        if ($data['date_until'] ?? null) {
+                            $indicators['date_until'] = 'Enviados hasta: ' . $data['date_until'];
+                        }
+                        
+                        return $indicators;
                     })
             ])
             ->actions([
