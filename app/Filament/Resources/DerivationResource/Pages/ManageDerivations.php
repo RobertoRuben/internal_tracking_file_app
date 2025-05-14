@@ -18,6 +18,7 @@ class ManageDerivations extends ManageRecords
         return [
             Actions\CreateAction::make()
                 ->label('Crear derivación')
+                ->icon('heroicon-o-plus-circle')
                 ->using(function (array $data) {
                     $derivation = static::getResource()::getModel()::create($data);
                     

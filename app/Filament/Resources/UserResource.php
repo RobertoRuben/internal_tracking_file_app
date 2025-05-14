@@ -75,8 +75,12 @@ class UserResource extends Resource
                             ->label('Contraseña')
                             ->password()
                             ->required()
-                            ->dehydrateStateUsing(fn(string $state): string => Hash::make($state))
-                            ->dehydrated(fn(?string $state): bool => filled($state))
+                            ->dehydrateStateUsing(function (string $state) {
+                                return Hash::make($state);
+                            })
+                            ->dehydrated(function (?string $state) {
+                                return filled($state);
+                            })
                             ->placeholder('Ingrese una contraseña segura')
                             ->minLength(8)
                             ->regex('/^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/')
@@ -98,9 +102,14 @@ class UserResource extends Resource
                             ->label('Empleado')
                             ->relationship(
                                 'employee',
-                                fn($query) => $query->where('is_active', true)
+                                'names',
+                                function ($query) {
+                                    return $query->where('is_active', true);
+                                }
                             )
-                            ->getOptionLabelFromRecordUsing(fn(Employee $record) => "{$record->names} {$record->paternal_surname} {$record->maternal_surname}")
+                            ->getOptionLabelFromRecordUsing(function (Employee $record) {
+                                return "{$record->names} {$record->paternal_surname} {$record->maternal_surname}";
+                            })
                             ->searchable(['names', 'paternal_surname', 'maternal_surname'])
                             ->placeholder('Seleccione un empleado')
                             ->preload()
@@ -135,10 +144,9 @@ class UserResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('employee.names')
                     ->label('Nombre del empleado')
-                    ->formatStateUsing(
-                        fn($record) =>
-                        $record->employee ? "{$record->employee->names} {$record->employee->paternal_surname} {$record->employee->maternal_surname}" : '-'
-                    )
+                    ->formatStateUsing(function ($record) {
+                        return $record->employee ? "{$record->employee->names} {$record->employee->paternal_surname} {$record->employee->maternal_surname}" : '-';
+                    })
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
@@ -168,27 +176,33 @@ class UserResource extends Resource
                     ->query(function (Builder $query, array $data) {
                         return $query->when(
                             $data['value'] !== null,
-                            fn(Builder $query) => $query->where('is_active', $data['value'])
+                            function (Builder $query) use ($data) {
+                                return $query->where('is_active', $data['value']);
+                            }
                         );
                     }),
                 Tables\Filters\SelectFilter::make('employee_id')
                     ->label('Empleado')
-                    ->relationship('employee', 'names', fn(Builder $query) => $query->where('is_active', true))
+                    ->relationship('employee', 'names', function ($query) {
+                        return $query->where('is_active', true);
+                    })
                     ->searchable()
                     ->preload(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar')
-                    ->requiresConfirmation()
-                    ->modalHeading('Eliminar usuario')
-                    ->modalDescription('¿Está seguro que desea eliminar este usuario? Esta acción no se puede deshacer.')
-                    ->modalSubmitActionLabel('Sí, eliminar')
-                    ->modalCancelActionLabel('No, cancelar'),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver'),
+                    Tables\Actions\EditAction::make()
+                        ->label('Editar'),
+                    Tables\Actions\DeleteAction::make()
+                        ->label('Eliminar')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar usuario')
+                        ->modalDescription('¿Está seguro que desea eliminar este usuario? Esta acción no se puede deshacer.')
+                        ->modalSubmitActionLabel('Sí, eliminar')
+                        ->modalCancelActionLabel('No, cancelar'),
+                ])->icon('heroicon-m-ellipsis-vertical'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

@@ -83,17 +83,19 @@ class DepartmentResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar')
-                    ->requiresConfirmation()
-                    ->modalHeading('Eliminar departamento')
-                    ->modalDescription('¿Está seguro que desea eliminar este departamento? Esta acción no se puede deshacer y podría afectar a los empleados asociados.')
-                    ->modalSubmitActionLabel('Sí, eliminar')
-                    ->modalCancelActionLabel('No, cancelar'),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver'),
+                    Tables\Actions\EditAction::make()
+                        ->label('Editar'),
+                    Tables\Actions\DeleteAction::make()
+                        ->label('Eliminar')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar departamento')
+                        ->modalDescription('¿Está seguro que desea eliminar este departamento? Esta acción no se puede deshacer y podría afectar a los empleados asociados.')
+                        ->modalSubmitActionLabel('Sí, eliminar')
+                        ->modalCancelActionLabel('No, cancelar'),
+                ])->icon('heroicon-m-ellipsis-vertical'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
