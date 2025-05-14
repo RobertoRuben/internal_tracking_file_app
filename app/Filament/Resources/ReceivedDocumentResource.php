@@ -145,8 +145,7 @@ class ReceivedDocumentResource extends Resource
                     ->timezone('America/Lima')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
+            ])            ->filters([
                 Tables\Filters\SelectFilter::make('derivation_status')
                     ->label('Estado')
                     ->options([
@@ -217,6 +216,37 @@ class ReceivedDocumentResource extends Resource
                         }
                         
                         return $indicators;
+                    }),
+                Tables\Filters\SelectFilter::make('charge_book_status')
+                    ->label('Estado en Cuaderno de Cargos')
+                    ->options([
+                        'registered' => 'Registrados',
+                        'not_registered' => 'No Registrados',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if (!isset($data['value']) || $data['value'] === '') {
+                            return $query;
+                        }
+                        
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if (!$userDepartmentId) {
+                            return $query;
+                        }
+                        
+                        $isRegistered = $data['value'] === 'registered';
+                        
+                        if ($isRegistered) {
+                            // Documentos que están registrados en el cuaderno de cargos del departamento actual
+                            return $query->whereHas('chargeBooks', function (Builder $chargeBookQuery) use ($userDepartmentId) {
+                                $chargeBookQuery->where('department_id', $userDepartmentId);
+                            });
+                        } else {
+                            // Documentos que NO están registrados en el cuaderno de cargos del departamento actual
+                            return $query->whereDoesntHave('chargeBooks', function (Builder $chargeBookQuery) use ($userDepartmentId) {
+                                $chargeBookQuery->where('department_id', $userDepartmentId);
+                            });
+                        }
                     })
             ])
             ->actions([
