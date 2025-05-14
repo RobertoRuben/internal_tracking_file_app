@@ -22,14 +22,12 @@ class ViewDerivation extends ViewRecord
             ->schema([
                 Components\Section::make('Información del documento')
                     ->icon('heroicon-o-document-text')
-                    ->description('Detalles del documento derivado')
-                    ->schema([
+                    ->description('Detalles del documento derivado')->schema([
+                        Components\TextEntry::make('document.doc_code')
+                            ->label('Código del documento'),
                         Components\TextEntry::make('document.name')
                             ->label('Nombre del documento')
                             ->copyable(),
-                        Components\TextEntry::make('document.registration_number')
-                            ->label('Número de registro')
-                            ->formatStateUsing(fn($state) => str_pad($state, 11, '0', STR_PAD_LEFT)),
                         Components\TextEntry::make('document.subject')
                             ->label('Asunto')
                             ->columnSpanFull(),
@@ -39,7 +37,8 @@ class ViewDerivation extends ViewRecord
                     ->icon('heroicon-o-arrow-path')
                     ->description('Detalles de la derivación')
                     ->columns(2)
-                    ->schema([                        Components\TextEntry::make('originDepartment.name')
+                    ->schema([
+                        Components\TextEntry::make('originDepartment.name')
                             ->label('Departamento de origen'),
                         Components\TextEntry::make('destinationDepartment.name')
                             ->label('Departamento de destino'),
@@ -58,11 +57,12 @@ class ViewDerivation extends ViewRecord
                 Components\Section::make('Historial de observaciones')
                     ->icon('heroicon-o-chat-bubble-left-right')
                     ->description('Comentarios sobre la derivación')
-                    ->visible(fn ($record) => $record->details()->exists())
+                    ->visible(fn($record) => $record->details()->exists())
                     ->schema([
                         Components\RepeatableEntry::make('details')
                             ->label(false)
-                            ->schema([                                Components\TextEntry::make('created_at')
+                            ->schema([
+                                Components\TextEntry::make('created_at')
                                     ->label('Fecha')
                                     ->dateTime('d/m/Y H:i'),
                                 Components\TextEntry::make('user.name')
@@ -75,11 +75,17 @@ class ViewDerivation extends ViewRecord
                             ->columns(3),
                     ]),
             ]);
-    }    protected function getHeaderActions(): array
+    }
+    protected function getHeaderActions(): array
     {
         return [
             Actions\EditAction::make()
-                ->label('Editar'),
+                ->label('Editar')
+                ->modalHeading('Editar derivación')
+                ->mutateFormDataUsing(function (array $data): array {
+                    $data['comments'] = '';
+                    return $data;
+                }),
         ];
     }
 }
