@@ -48,15 +48,11 @@ class ManageDerivations extends ManageRecords
     {
         $query = parent::getTableQuery();
         
-        // Obtener el ID del departamento del usuario actual
         $userDepartmentId = Auth::user()->employee->department_id ?? null;
         
         if ($userDepartmentId) {
-            // Filtrar derivaciones por departamento del usuario (enviadas o recibidas)
             $query->where(function (Builder $subQuery) use ($userDepartmentId) {
-                // Derivaciones enviadas por el departamento del usuario
                 $subQuery->where('origin_department_id', $userDepartmentId)
-                    // O derivaciones recibidas por el departamento del usuario
                     ->orWhere('destination_department_id', $userDepartmentId);
             });
         }

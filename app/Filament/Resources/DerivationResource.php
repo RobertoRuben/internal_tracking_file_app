@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\DerivationResource\Pages;
-use App\Filament\Resources\DerivationResource\RelationManagers;
 use App\Models\Derivation;
 use App\Models\DerivationDetail;
 use Filament\Forms;
@@ -12,20 +11,15 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 
 class DerivationResource extends Resource
 {
     protected static ?string $model = Derivation::class;
-
     protected static ?string $navigationIcon = 'heroicon-o-arrow-path-rounded-square';
-
     protected static ?string $modelLabel = 'Derivación';
-
     protected static ?string $pluralModelLabel = 'Derivaciones';
-
     protected static ?string $navigationGroup = 'Gestión documental';
 
     public static function form(Form $form): Form
@@ -39,21 +33,21 @@ class DerivationResource extends Resource
                         Forms\Components\Select::make('status')
                             ->label('Estado')
                             ->options([
-                                'Enviado' => 'Enviado',
-                                'Recibido' => 'Recibido',
+                                'Enviado'   => 'Enviado',
+                                'Recibido'  => 'Recibido',
                                 'Rechazado' => 'Rechazado',
                             ])
                             ->default('Enviado')
                             ->required()
                             ->validationMessages([
-                                'required' => 'Debe seleccionar un estado.'
+                                'required' => 'Debe seleccionar un estado.',
                             ]),
-                        
+
                         Forms\Components\Textarea::make('comments')
                             ->label('Observaciones')
                             ->placeholder('Ingrese alguna observación o comentario sobre esta derivación...')
                             ->columnSpanFull(),
-                        
+
                         Forms\Components\Hidden::make('derivated_by_user_id')
                             ->default(fn() => Auth::id())
                             ->required(),
@@ -66,16 +60,16 @@ class DerivationResource extends Resource
                         Forms\Components\Select::make('document_id')
                             ->label('Documento')
                             ->relationship(
-                                'document', 
+                                'document',
                                 'name',
-                                fn (Builder $query) => $query->where('is_derived', false)
+                                fn(Builder $query) => $query->where('is_derived', false)
                             )
                             ->getOptionLabelFromRecordUsing(fn($record) => $record->name)
                             ->searchable(['name', 'subject', 'registration_number'])
                             ->preload()
                             ->required()
                             ->validationMessages([
-                                'required' => 'Debe seleccionar un documento.'
+                                'required' => 'Debe seleccionar un documento.',
                             ]),
                     ]),
 
@@ -84,11 +78,9 @@ class DerivationResource extends Resource
                     ->description('Origen y destino de la derivación')
                     ->schema([
                         Forms\Components\Hidden::make('origin_department_id')
-                            ->default(function () {
-                                return Auth::user()->employee->department_id ?? null;
-                            })
+                            ->default(fn() => Auth::user()->employee->department_id ?? null)
                             ->required(),
-                        
+
                         Forms\Components\Select::make('destination_department_id')
                             ->label('Departamento de destino')
                             ->relationship('destinationDepartment', 'name')
@@ -96,7 +88,7 @@ class DerivationResource extends Resource
                             ->preload()
                             ->required()
                             ->validationMessages([
-                                'required' => 'Debe seleccionar un departamento de destino.'
+                                'required' => 'Debe seleccionar un departamento de destino.',
                             ]),
                     ]),
             ]);
@@ -139,7 +131,7 @@ class DerivationResource extends Resource
                     ->colors([
                         'warning' => 'Enviado',
                         'success' => 'Recibido',
-                        'danger' => 'Rechazado',
+                        'danger'  => 'Rechazado',
                     ]),
 
                 Tables\Columns\TextColumn::make('created_at')
@@ -148,223 +140,103 @@ class DerivationResource extends Resource
                     ->sortable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('origin_department_id')
-                    ->label('Departamento de origen')
-                    ->relationship('originDepartment', 'name')
-                    ->searchable()
-                    ->preload(),
-
                 Tables\Filters\SelectFilter::make('destination_department_id')
                     ->label('Departamento de destino')
                     ->relationship('destinationDepartment', 'name')
                     ->searchable()
                     ->preload(),
-
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('Estado')
-                    ->options([
-                        'Enviado' => 'Enviado',
-                        'Recibido' => 'Recibido',
-                        'Rechazado' => 'Rechazado',
-                    ]),
-
-                Tables\Filters\SelectFilter::make('derivation_relation')
-                    ->label('Relación con derivación')
-                    ->options([
-                        'sent' => 'Enviadas por mi departamento',
-                        'received' => 'Recibidas por mi departamento',
+                
+                Tables\Filters\Filter::make('created_at')
+                    ->form([
+                        Forms\Components\DatePicker::make('created_from')
+                            ->label('Fecha desde'),
+                        Forms\Components\DatePicker::make('created_until')
+                            ->label('Fecha hasta'),
                     ])
-                    ->query(function (Builder $query, array $data) {
-                        if (empty($data['value'])) {
-                            return $query;
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['created_from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['created_until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+                        
+                        if ($data['created_from'] ?? null) {
+                            $indicators['created_from'] = 'Derivaciones desde ' . $data['created_from'];
                         }
                         
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            return $query;
+                        if ($data['created_until'] ?? null) {
+                            $indicators['created_until'] = 'Derivaciones hasta ' . $data['created_until'];
                         }
                         
-                        return match ($data['value']) {
-                            'sent' => $query->where('origin_department_id', $userDepartmentId),
-                            'received' => $query->where('destination_department_id', $userDepartmentId),
-                            default => $query,
-                        };
+                        return $indicators;
                     }),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver'),
 
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
-                    
-                Tables\Actions\Action::make('changeStatus')
-                    ->label('Cambiar estado')
-                    ->icon('heroicon-o-check-badge')
-                    ->color('warning')
-                    ->form([
-                        Forms\Components\Select::make('status')
-                            ->label('Nuevo estado')
-                            ->options([
-                                'Enviado' => 'Enviado',
-                                'Recibido' => 'Recibido',
-                                'Rechazado' => 'Rechazado',
-                            ])
-                            ->reactive()
-                            ->required(),
-                        Forms\Components\Textarea::make('comments')
-                            ->label('Observaciones')
-                            ->placeholder('Ingrese alguna observación sobre este cambio de estado...')
-                            ->required(fn (\Closure $get) => $get('status') === 'Rechazado')
-                            ->validationMessages([
-                                'required' => 'Debe proporcionar un comentario cuando rechaza una derivación.'
-                            ]),
-                    ])
-                    ->action(function (Derivation $record, array $data): void {
-                        $record->update(['status' => $data['status']]);
+                    Tables\Actions\EditAction::make()
+                        ->label('Editar'),
                         
-                        \App\Models\DerivationDetail::create([
-                            'derivation_id' => $record->id,
-                            'comments' => $data['comments'] ?? 'Estado actualizado a ' . $data['status'],
-                            'user_id' => auth()->id(),
-                            'status' => $data['status']
-                        ]);
-
-                        Notification::make()
-                            ->title('Estado actualizado')
-                            ->body("La derivación ha sido marcada como {$data['status']}.")
-                            ->success()
-                            ->send();
-                    }),
-
-                Tables\Actions\Action::make('reject')
-                    ->label('Rechazar')
-                    ->icon('heroicon-o-x-circle')
-                    ->color('danger')
-                    ->form([
-                        Forms\Components\Textarea::make('comments')
-                            ->label('Motivo del rechazo')
-                            ->placeholder('Explique el motivo por el que rechaza esta derivación...')
-                            ->required()
-                            ->validationMessages([
-                                'required' => 'Debe proporcionar un motivo para rechazar la derivación.'
-                            ]),
-                    ])
-                    ->action(function (Derivation $record, array $data): void {
-                        $record->update(['status' => 'Rechazado']);
-                        
-                        \App\Models\DerivationDetail::create([
-                            'derivation_id' => $record->id,
-                            'comments' => $data['comments'],
-                            'user_id' => auth()->id(),
-                            'status' => 'Rechazado'
-                        ]);
-
-                        Notification::make()
-                            ->title('Derivación rechazada')
-                            ->body('La derivación ha sido rechazada correctamente.')
-                            ->success()
-                            ->send();
-                    }),
+                    Tables\Actions\DeleteAction::make()
+                        ->label('Eliminar derivación')
+                        ->icon('heroicon-o-trash')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar derivación')
+                        ->modalDescription('¿Está seguro que desea eliminar esta derivación? Esta acción no se puede revertir.')
+                        ->modalSubmitActionLabel('Sí, eliminar')
+                        ->successNotificationTitle('Derivación eliminada correctamente'),
+                ])
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\BulkAction::make('changeStatusBulk')
-                        ->label('Cambiar estado')
-                        ->icon('heroicon-o-check-badge')
-                        ->color('warning')
-                        ->form([
-                            Forms\Components\Select::make('status')
-                                ->label('Nuevo estado')
-                                ->options([
-                                    'Enviado' => 'Enviado',
-                                    'Recibido' => 'Recibido',
-                                    'Rechazado' => 'Rechazado',
-                                ])
-                                ->reactive()
-                                ->required(),
-                            Forms\Components\Textarea::make('comments')
-                                ->label('Observaciones')
-                                ->placeholder('Ingrese alguna observación sobre este cambio de estado...')
-                                ->required(fn (\Closure $get) => $get('status') === 'Rechazado')
-                                ->validationMessages([
-                                    'required' => 'Debe proporcionar un comentario cuando rechaza las derivaciones.'
-                                ]),
-                        ])
-                        ->action(function (\Illuminate\Support\Collection $records, array $data): void {
-                            $records->each(function ($record) use ($data) {
-                                $record->update(['status' => $data['status']]);
-                                
-                                \App\Models\DerivationDetail::create([
-                                    'derivation_id' => $record->id,
-                                    'comments' => $data['comments'] ?? 'Estado actualizado a ' . $data['status'],
-                                    'user_id' => auth()->id(),
-                                    'status' => $data['status']
-                                ]);
-                            });
-                            
-                            Notification::make()
-                                ->title('Estado actualizado')
-                                ->body("Las derivaciones seleccionadas han sido marcadas como {$data['status']}.")
-                                ->success()
-                                ->send();
-                        }),
-
-                    Tables\Actions\BulkAction::make('rejectBulk')
-                        ->label('Rechazar seleccionados')
-                        ->icon('heroicon-o-x-circle')
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->label('Eliminar todas')
+                        ->icon('heroicon-o-trash')
                         ->color('danger')
-                        ->form([
-                            Forms\Components\Textarea::make('comments')
-                                ->label('Motivo del rechazo')
-                                ->placeholder('Explique el motivo por el que rechaza estas derivaciones...')
-                                ->required()
-                                ->validationMessages([
-                                    'required' => 'Debe proporcionar un motivo para rechazar las derivaciones.'
-                                ]),
-                        ])
-                        ->action(function (\Illuminate\Support\Collection $records, array $data): void {
-                            $records->each(function ($record) use ($data) {
-                                $record->update(['status' => 'Rechazado']);
-                                
-                                \App\Models\DerivationDetail::create([
-                                    'derivation_id' => $record->id,
-                                    'comments' => $data['comments'],
-                                    'user_id' => auth()->id(),
-                                    'status' => 'Rechazado'
-                                ]);
-                            });
-                            
-                            Notification::make()
-                                ->title('Derivaciones rechazadas')
-                                ->body('Las derivaciones seleccionadas han sido rechazadas correctamente.')
-                                ->success()
-                                ->send();
-                        }),
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar derivaciones seleccionadas')
+                        ->modalDescription('¿Está seguro que desea eliminar las derivaciones seleccionadas? Esta acción no se puede revertir.')
+                        ->modalSubmitActionLabel('Sí, eliminar todas')
+                        ->successNotificationTitle('Derivaciones eliminadas correctamente'),
                 ]),
             ]);
     }
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
     {
         return [
             'index' => Pages\ManageDerivations::route('/'),
-            'view' => Pages\ViewDerivation::route('/{record}'),
-            'edit' => Pages\EditDerivation::route('/{record}/edit'),
+            'view'  => Pages\ViewDerivation::route('/{record}'),
+            'edit'  => Pages\EditDerivation::route('/{record}/edit'),
         ];
     }
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()
+        $query = parent::getEloquentQuery()
             ->with(['document', 'originDepartment', 'destinationDepartment', 'derivatedBy']);
+        
+        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+        
+        if ($userDepartmentId) {
+            $query->where('origin_department_id', $userDepartmentId);
+        }
+        
+        return $query;
     }
 }
