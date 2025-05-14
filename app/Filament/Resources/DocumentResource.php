@@ -103,25 +103,8 @@ class DocumentResource extends Resource
                     ->default(function () {
                         return Auth::user()->employee->department_id ?? null;
                     })->required(),
-
-                Forms\Components\Section::make('Información del remitente')
-                    ->description('Datos del empleado que remite el documento')
-                    ->icon('heroicon-o-user-circle')
-                    ->schema([
-                        Forms\Components\Select::make('employee_id')
-                            ->label('Empleado remitente')
-                            ->relationship('employee', 'names', fn(Builder $query) => $query->where('is_active', true))
-                            ->getOptionLabelFromRecordUsing(fn($record) => "{$record->names} {$record->paternal_surname} {$record->maternal_surname}")
-                            ->required()
-                            ->searchable(['names', 'paternal_surname', 'maternal_surname', 'dni'])
-                            ->preload()
-                            ->placeholder('Seleccione un empleado')
-                            ->validationMessages([
-                                'required' => 'Debe seleccionar un empleado.'
-                            ]),
-                        Forms\Components\Hidden::make('is_derived')
-                            ->default(false),
-                    ]),
+                Forms\Components\Hidden::make('is_derived')
+                    ->default(false),
             ]);
     }
     public static function table(Table $table): Table

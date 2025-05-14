@@ -13,7 +13,6 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Collection;
-use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\UserRelationManager;
 
 class EmployeeResource extends Resource
@@ -280,7 +279,6 @@ class EmployeeResource extends Resource
     public static function getRelations(): array
     {
         return [
-            DocumentsRelationManager::class,
             UserRelationManager::class,
         ];
     }

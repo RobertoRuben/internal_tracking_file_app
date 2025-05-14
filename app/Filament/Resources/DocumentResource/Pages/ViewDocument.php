@@ -30,14 +30,6 @@ class ViewDocument extends ViewRecord
                         Components\TextEntry::make('created_at')
                             ->label('Fecha de registro')
                             ->dateTime('d/m/Y H:i'),
-                    ]),                
-                Components\Section::make('Información del remitente')
-                    ->icon('heroicon-o-user-circle')
-                    ->description('Datos del empleado que remite el documento')
-                    ->aside()
-                    ->schema([
-                        Components\TextEntry::make('employee.full_name')
-                            ->label('Empleado remitente'),
                         Components\TextEntry::make('is_derived')
                             ->label('Estado de derivación')
                             ->formatStateUsing(fn(bool $state) => $state ? 'Derivado' : 'No derivado')

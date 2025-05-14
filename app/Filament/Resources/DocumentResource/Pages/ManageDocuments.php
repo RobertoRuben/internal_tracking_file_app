@@ -61,11 +61,6 @@ class ManageDocuments extends ManageRecords
                     ->orWhere('name', 'like', "%{$search}%")
                     ->orWhere('subject', 'like', "%{$search}%")
                     ->orWhere('registration_number', 'like', "%{$search}%")
-                    ->orWhereHas('employee', function (Builder $query) use ($search) {
-                        $query->where('names', 'like', "%{$search}%")
-                              ->orWhere('paternal_surname', 'like', "%{$search}%")
-                              ->orWhere('maternal_surname', 'like', "%{$search}%");
-                    })
                     ->orWhereHas('creatorDepartment', function (Builder $query) use ($search) {
                         $query->where('name', 'like', "%{$search}%");
                     })

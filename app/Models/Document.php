@@ -19,14 +19,8 @@ class Document extends Model
         'path',
         'registered_by_user_id',
         'is_derived',
-        'employee_id',
         'created_by_department_id'
     ];
-
-    public function employee(): BelongsTo
-    {
-        return $this->belongsTo(Employee::class);
-    }
 
     public function creatorDepartment(): BelongsTo
     {
