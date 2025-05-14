@@ -263,8 +263,7 @@ class ReceivedDocumentResource extends Resource
                     Tables\Actions\Action::make('registerInChargeBook')
                         ->label('Recibir documento')
                         ->icon('heroicon-o-inbox-arrow-down')
-                        ->color('primary')
-                        ->visible(function (Document $record) {
+                        ->color('primary')                        ->visible(function (Document $record) {
                             $userDepartmentId = Auth::user()->employee->department_id ?? null;
                             
                             if (!$userDepartmentId) {
@@ -281,13 +280,19 @@ class ReceivedDocumentResource extends Resource
                                 return false;
                             }
                             
+                            // Verificar si ya existe un DerivationDetail con estado Recibido o Rechazado
                             $hasConfirmationDetail = \App\Models\DerivationDetail::where('derivation_id', $lastDerivation->id)
                                 ->whereIn('status', ['Recibido', 'Rechazado'])
                                 ->exists();
                                 
-                            return !$hasConfirmationDetail;
-                        })
-                        ->action(function (Document $record) {
+                            // Verificar si ya existe una entrada en el cuaderno de cargos para este documento
+                            $isInChargeBook = \App\Models\ChargeBook::where('document_id', $record->id)
+                                ->where('department_id', $userDepartmentId)
+                                ->exists();
+                                
+                            // El botón solo debe ser visible si no hay confirmación ni está en cuaderno de cargos
+                            return !$hasConfirmationDetail && !$isInChargeBook;
+                        })                        ->action(function (Document $record) {
                             $userDepartmentId = Auth::user()->employee->department_id ?? null;
                             
                             if (!$userDepartmentId) {
@@ -326,13 +331,36 @@ class ReceivedDocumentResource extends Resource
                                 return;
                             }
                             
-                            $userName = auth()->user()->name;
+                            // Verificar si ya existe una entrada en el cuaderno de cargos
+                            $isInChargeBook = \App\Models\ChargeBook::where('document_id', $record->id)
+                                ->where('department_id', $userDepartmentId)
+                                ->exists();
+                                
+                            if ($isInChargeBook) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Este documento ya está registrado en tu cuaderno de cargos.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                              $userName = auth()->user()->name;
                             
                             \App\Models\DerivationDetail::create([
                                 'derivation_id' => $derivation->id,
                                 'comments' => "El usuario {$userName} confirmó la recepción del documento, y este documento fue registrado en su cuaderno de cargos",
                                 'user_id' => auth()->id(),
                                 'status' => 'Recibido'
+                            ]);
+                            
+                            // Crear registro en el cuaderno de cargos
+                            \App\Models\ChargeBook::create([
+                                'document_id' => $record->id,
+                                'sender_department_id' => $derivation->origin_department_id,
+                                'sender_user_id' => $derivation->derivated_by_user_id,
+                                'receiver_user_id' => auth()->id(),
+                                'department_id' => $userDepartmentId,
+                                'notes' => "Documento recibido automáticamente desde el sistema de derivaciones"
                             ]);
                             
                             Notification::make()

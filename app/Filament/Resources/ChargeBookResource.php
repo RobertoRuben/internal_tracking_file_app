@@ -37,27 +37,40 @@ class ChargeBookResource extends Resource
                     ->schema([
                         Forms\Components\Select::make('document_id')
                             ->label('Documento')
-                            ->options(function () {
+                            ->options(function (callable $get, ?ChargeBook $record, string $operation) {
                                 $userDepartmentId = Auth::user()->employee->department_id ?? null;
                                 
                                 if (!$userDepartmentId) {
                                     return [];
                                 }
                                 
-                                $derivedDocuments = \App\Models\Document::query()
-                                    ->whereHas('derivations', function ($query) use ($userDepartmentId) {
-                                        $query->where('destination_department_id', $userDepartmentId);
-                                    })
-                                    ->whereDoesntHave('chargeBooks', function ($query) use ($userDepartmentId) {
-                                        $query->where('department_id', $userDepartmentId);
-                                    })
-                                    ->get()
-                                    ->mapWithKeys(function ($document) {
-                                        return [$document->id => "{$document->doc_code} - {$document->name}"];
-                                    })
-                                    ->toArray();
-                                
-                                return $derivedDocuments;
+                                if ($operation === 'edit' && $record) {
+                                    return \App\Models\Document::query()
+                                        ->where(function($query) use ($userDepartmentId) {
+                                            $query->whereHas('derivations', function ($query) use ($userDepartmentId) {
+                                                $query->where('destination_department_id', $userDepartmentId);
+                                            });
+                                        })
+                                        ->orWhere('id', $record->document_id)
+                                        ->get()
+                                        ->mapWithKeys(function ($document) {
+                                            return [$document->id => "{$document->doc_code} - {$document->name}"];
+                                        })
+                                        ->toArray();
+                                } else {
+                                    return \App\Models\Document::query()
+                                        ->whereHas('derivations', function ($query) use ($userDepartmentId) {
+                                            $query->where('destination_department_id', $userDepartmentId);
+                                        })
+                                        ->whereDoesntHave('chargeBooks', function ($query) use ($userDepartmentId) {
+                                            $query->where('department_id', $userDepartmentId);
+                                        })
+                                        ->get()
+                                        ->mapWithKeys(function ($document) {
+                                            return [$document->id => "{$document->doc_code} - {$document->name}"];
+                                        })
+                                        ->toArray();
+                                }
                             })
                             ->searchable()
                             ->required()
@@ -223,7 +236,25 @@ class ChargeBookResource extends Resource
                     Tables\Actions\ViewAction::make()
                         ->label('Ver'),
                     Tables\Actions\EditAction::make()
-                        ->label('Editar'),
+                        ->label('Editar')
+                        ->mutateRecordDataUsing(function (array $data): array {
+                            $document = \App\Models\Document::find($data['document_id']);
+                            $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                            
+                            if ($document && $userDepartmentId) {
+                                $derivation = \App\Models\Derivation::where('document_id', $document->id)
+                                    ->where('destination_department_id', $userDepartmentId)
+                                    ->latest()
+                                    ->first();
+                                
+                                if ($derivation) {
+                                    $data['sender_department_id'] = $derivation->origin_department_id;
+                                    $data['sender_user_id'] = $derivation->derivated_by_user_id;
+                                }
+                            }
+                            
+                            return $data;
+                        }),
                     Tables\Actions\Action::make('download_document')
                         ->label('Ver documento')
                         ->icon('heroicon-o-document-text')
@@ -276,11 +307,9 @@ class ChargeBookResource extends Resource
     {
         $query = parent::getEloquentQuery();
         
-        // Obtener el departamento del usuario actual
         $userDepartmentId = Auth::user()->employee->department_id ?? null;
         
         if ($userDepartmentId) {
-            // Filtrar por registros que pertenecen al departamento del usuario actual
             $query->where('department_id', $userDepartmentId);
         }
         
