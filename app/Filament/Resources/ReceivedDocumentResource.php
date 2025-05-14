@@ -30,7 +30,6 @@ class ReceivedDocumentResource extends Resource
     {
         return $form
             ->schema([
-                // No se permite editar estos documentos, pero se necesita el formulario para las vistas
                 Forms\Components\Section::make('Información del documento')
                     ->description('Datos básicos del documento')
                     ->icon('heroicon-o-document-text')
@@ -49,9 +48,10 @@ class ReceivedDocumentResource extends Resource
     {
         return $table
             ->defaultSort('created_at', 'desc')
+            ->striped()
             ->columns([
                 Tables\Columns\TextColumn::make('doc_code')
-                    ->label('Código')
+                    ->label('Código de Documento')
                     ->searchable()
                     ->sortable()
                     ->copyable()
@@ -67,13 +67,14 @@ class ReceivedDocumentResource extends Resource
                     ->limit(30)
                     ->tooltip(fn(Document $record): string => $record->subject),
                 Tables\Columns\TextColumn::make('creatorDepartment.name')
-                    ->label('Departamento origen')
+                    ->label('Origen')
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('employee.full_name')
-                    ->label('Empleado remitente')
+                    ->label('Enviado por')
                     ->searchable()
-                    ->sortable(),                Tables\Columns\BadgeColumn::make('derivation_status')
+                    ->sortable(),                
+                Tables\Columns\BadgeColumn::make('derivation_status')
                     ->label('Estado')
                     ->getStateUsing(function (Document $record) {
                         $userDepartmentId = Auth::user()->employee->department_id ?? null;
@@ -82,7 +83,6 @@ class ReceivedDocumentResource extends Resource
                             return 'Sin estado';
                         }
                         
-                        // Obtener la última derivación dirigida a este departamento
                         $lastDerivation = $record->derivations()
                             ->where('destination_department_id', $userDepartmentId)
                             ->latest()
@@ -92,7 +92,6 @@ class ReceivedDocumentResource extends Resource
                             return 'Sin estado';
                         }
                         
-                        // Verificar el estado según los detalles
                         $lastDetail = \App\Models\DerivationDetail::where('derivation_id', $lastDerivation->id)
                             ->whereIn('status', ['Recibido', 'Rechazado'])
                             ->latest()
@@ -102,32 +101,59 @@ class ReceivedDocumentResource extends Resource
                             return $lastDetail->status;
                         }
                         
-                        return 'Enviado'; // Estado por defecto si no hay detalles de recibido o rechazado
+                        return 'Enviado';
                     })
                     ->colors([
                         'warning' => 'Enviado',
                         'success' => 'Recibido',
                         'danger' => 'Rechazado',
                     ]),
+                Tables\Columns\TextColumn::make('derivation_date')
+                    ->label('Fecha de envío')
+                    ->getStateUsing(function (Document $record) {
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if (!$userDepartmentId) {
+                            return '-';
+                        }
+                        
+                        $derivation = $record->derivations()
+                            ->where('destination_department_id', $userDepartmentId)
+                            ->latest()
+                            ->first();
+                            
+                        if (!$derivation) {
+                            return '-';
+                        }
+                        
+                        return $derivation->created_at->format('d/m/Y H:i');
+                    })
+                    // Simplificamos el sortable para evitar el error
+                    ->sortable()
+                    ->searchable(false),
                 Tables\Columns\TextColumn::make('created_at')
-                    ->label('Fecha de registro')
+                    ->label('Fecha de creación')
                     ->dateTime('d/m/Y H:i')
-                    ->sortable(),
+                    ->timezone('America/Lima')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Fecha de actualización')
+                    ->dateTime('d/m/Y H:i')
+                    ->timezone('America/Lima')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('origin_department_id')
-                    ->label('Departamento de origen')
-                    ->relationship('creatorDepartment', 'name')
-                    ->searchable()
-                    ->preload(),                Tables\Filters\SelectFilter::make('derivation_status')
-                    ->label('Estado de derivación')
+                Tables\Filters\SelectFilter::make('derivation_status')
+                    ->label('Estado')
                     ->options([
                         'Enviado' => 'Enviado',
                         'Recibido' => 'Recibido',
                         'Rechazado' => 'Rechazado',
                     ])
                     ->query(function (Builder $query, array $data) {
-                        if (empty($data['value'])) {
+                        if (!isset($data['value']) || $data['value'] === '') {
                             return $query;
                         }
                         
@@ -145,394 +171,195 @@ class ReceivedDocumentResource extends Resource
                                     $detailsQuery->where('status', $status);
                                 });
                         });
-                    }),
+                    })
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\Action::make('download')
-                    ->label('Ver documento')
-                    ->icon('heroicon-o-document-text')
-                    ->color('success')
-                    ->url(function (Document $record) {
-                        return asset('storage/' . $record->path);
-                    })
-                    ->openUrlInNewTab()
-                    ->visible(fn(Document $record) => $record->path && Storage::disk('public')->exists($record->path)),
-                Tables\Actions\Action::make('registerInChargeBook')
-                    ->label('Registrar cargo')
-                    ->icon('heroicon-o-book-open')
-                    ->color('primary')
-                    ->form([
-                        Forms\Components\Textarea::make('notes')
-                            ->label('Observaciones')
-                            ->placeholder('Ingrese cualquier observación sobre el documento para el cuaderno de cargos.')
-                    ])
-                    ->action(function (Document $record, array $data) {
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Error')
-                                ->body('No se pudo determinar su departamento.')
-                                ->send();
-                            return;
-                        }
-                        
-                        // Buscar la última derivación dirigida a este departamento
-                        $derivation = $record->derivations()
-                            ->where('destination_department_id', $userDepartmentId)
-                            ->latest()
-                            ->first();
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\Action::make('download')
+                        ->label('Ver documento')
+                        ->icon('heroicon-o-document-text')
+                        ->color('success')
+                        ->url(function (Document $record) {
+                            return asset('storage/' . $record->path);
+                        })
+                        ->openUrlInNewTab()
+                        ->visible(fn(Document $record) => $record->path && Storage::disk('public')->exists($record->path)),
+                    Tables\Actions\Action::make('registerInChargeBook')
+                        ->label('Recibir documento')
+                        ->icon('heroicon-o-inbox-arrow-down')
+                        ->color('primary')
+                        ->visible(function (Document $record) {
+                            $userDepartmentId = Auth::user()->employee->department_id ?? null;
                             
-                        if (!$derivation) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Error')
-                                ->body('No se encontró una derivación para este documento.')
-                                ->send();
-                            return;
-                        }                          try {
-                            // Registrar el comentario de recepción si no existe ya
-                            $hasReceivedDetail = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
-                                ->where('status', 'Recibido')
-                                ->exists();
-                                
-                            if (!$hasReceivedDetail) {
-                                // Obtener nombre del usuario actual
-                                $userName = auth()->user()->name;
-                                
-                                // Registrar el comentario de recepción con mensaje personalizado
-                                \App\Models\DerivationDetail::create([
-                                    'derivation_id' => $derivation->id,
-                                    'comments' => "El usuario {$userName} confirmó la recepción del documento, y este documento fue registrado en su cuaderno de cargos",
-                                    'user_id' => auth()->id(),
-                                    'status' => 'Recibido'
-                                ]);
+                            if (!$userDepartmentId) {
+                                return false;
                             }
                             
-                            // Creamos el registro en el cuaderno de cargos
-                            $chargeBook = \App\Models\ChargeBook::create([
-                                'document_id' => $record->id,
-                                'sender_department_id' => $derivation->origin_department_id,
-                                'sender_user_id' => $derivation->derivated_by_user_id,
-                                'notes' => $data['notes'] ?? null,
+                            // Obtener la última derivación dirigida a este departamento
+                            $lastDerivation = $record->derivations()
+                                ->where('destination_department_id', $userDepartmentId)
+                                ->latest()
+                                ->first();
+                                
+                            if (!$lastDerivation) {
+                                return false;
+                            }
+                            
+                            $hasConfirmationDetail = \App\Models\DerivationDetail::where('derivation_id', $lastDerivation->id)
+                                ->whereIn('status', ['Recibido', 'Rechazado'])
+                                ->exists();
+                                
+                            return !$hasConfirmationDetail;
+                        })
+                        ->action(function (Document $record) {
+                            $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                            
+                            if (!$userDepartmentId) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('No tienes un departamento asignado.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                            
+                            $derivation = $record->derivations()
+                                ->where('destination_department_id', $userDepartmentId)
+                                ->latest()
+                                ->first();
+                                
+                            if (!$derivation) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('No hay una derivación para este documento dirigida a tu departamento.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                            
+                            $hasConfirmationDetail = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
+                                ->whereIn('status', ['Recibido', 'Rechazado'])
+                                ->exists();
+                                
+                            if ($hasConfirmationDetail) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('Este documento ya ha sido recibido o rechazado.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                            
+                            $userName = auth()->user()->name;
+                            
+                            \App\Models\DerivationDetail::create([
+                                'derivation_id' => $derivation->id,
+                                'comments' => "El usuario {$userName} confirmó la recepción del documento, y este documento fue registrado en su cuaderno de cargos",
+                                'user_id' => auth()->id(),
+                                'status' => 'Recibido'
                             ]);
                             
                             Notification::make()
+                                ->title('Éxito')
+                                ->body('El documento ha sido recibido y registrado en tu cuaderno de cargos.')
                                 ->success()
-                                ->title('Documento registrado')
-                                ->body('El documento ha sido registrado en el cuaderno de cargos con el número: ' . str_pad($chargeBook->registration_number, 8, '0', STR_PAD_LEFT))
                                 ->send();
-                                
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Error al registrar')
-                                ->body('No se pudo registrar el documento en el cuaderno de cargos: ' . $e->getMessage())
-                                ->send();
-                        }
-                    })
-                    ->visible(function (Document $record) {
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            return false;
-                        }
-                        
-                        // Verificar si el documento ya está registrado en el cuaderno de cargos del departamento
-                        $existsInChargeBook = \App\Models\ChargeBook::where('document_id', $record->id)
-                            ->where('department_id', $userDepartmentId)
-                            ->exists();
-                        
-                        // Mostrar el botón solo si existe una derivación y no está en el cuaderno
-                        $hasDerivation = $record->derivations()
-                            ->where('destination_department_id', $userDepartmentId)
-                            ->exists();
-                        
-                        return $hasDerivation && !$existsInChargeBook;
-                    }),
-                Tables\Actions\Action::make('receiveDocument')
-                    ->label('Recibir')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->form([
-                        Forms\Components\Textarea::make('comments')
-                            ->label('Observaciones')
-                            ->placeholder('Ingrese alguna observación sobre la recepción del documento...')
-                    ])                    ->action(function (Document $record, array $data) {
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Error')
-                                ->body('No se pudo determinar su departamento.')
-                                ->send();
-                            return;
-                        }
-                        
-                        // Buscar la última derivación dirigida a este departamento
-                        $derivation = $record->derivations()
-                            ->where('destination_department_id', $userDepartmentId)
-                            ->latest()
-                            ->first();
-                            
-                        if (!$derivation) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Error')
-                                ->body('No se encontró una derivación pendiente para este documento.')
-                                ->send();
-                            return;
-                        }
-                        
-                        // Registrar el comentario
-                        \App\Models\DerivationDetail::create([
-                            'derivation_id' => $derivation->id,
-                            'comments' => $data['comments'] ?? 'Documento recibido',
-                            'user_id' => auth()->id(),
-                            'status' => 'Recibido'
-                        ]);
-                        
-                        Notification::make()
-                            ->success()
-                            ->title('Documento recibido')
-                            ->body('El documento ha sido marcado como recibido.')
-                            ->send();
-                    })
-                    ->visible(function (Document $record) {
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            return false;
-                        }
-                        
-                        // Verificar si hay una derivación pendiente (sin registro de Recibido o Rechazado)
-                        $derivation = $record->derivations()
-                            ->where('destination_department_id', $userDepartmentId)
-                            ->latest()
-                            ->first();
-                            
-                        if (!$derivation) {
-                            return false;
-                        }
-                        
-                        // Verificar si ya se marcó como recibido o rechazado
-                        $hasReceivedOrRejected = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
-                            ->whereIn('status', ['Recibido', 'Rechazado'])
-                            ->exists();
-                            
-                        return !$hasReceivedOrRejected;
-                    }),Tables\Actions\Action::make('rejectDocument')
-                    ->label('Rechazar')
-                    ->icon('heroicon-o-x-circle')
-                    ->color('danger')
-                    ->form([
-                        Forms\Components\Textarea::make('comments')
-                            ->label('Motivo del rechazo')
-                            ->placeholder('Explique el motivo por el que rechaza este documento...')
-                            ->required()
-                            ->validationMessages([
-                                'required' => 'Debe proporcionar un motivo para rechazar el documento.'
-                            ]),
-                    ])                    ->action(function (Document $record, array $data) {
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Error')
-                                ->body('No se pudo determinar su departamento.')
-                                ->send();
-                            return;
-                        }
-                        
-                        // Buscar la última derivación dirigida a este departamento
-                        $derivation = $record->derivations()
-                            ->where('destination_department_id', $userDepartmentId)
-                            ->latest()
-                            ->first();
-                            
-                        if (!$derivation) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Error')
-                                ->body('No se encontró una derivación pendiente para este documento.')
-                                ->send();
-                            return;
-                        }
-                        
-                        // Registrar el comentario con estado Rechazado
-                        \App\Models\DerivationDetail::create([
-                            'derivation_id' => $derivation->id,
-                            'comments' => $data['comments'],
-                            'user_id' => auth()->id(),
-                            'status' => 'Rechazado'
-                        ]);
-                        
-                        Notification::make()
-                            ->success()
-                            ->title('Documento rechazado')
-                            ->body('El documento ha sido marcado como rechazado.')
-                            ->send();
-                    })
-                    ->visible(function (Document $record) {
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            return false;
-                        }
-                        
-                        // Verificar si hay una derivación pendiente (sin registro de Recibido o Rechazado)
-                        $derivation = $record->derivations()
-                            ->where('destination_department_id', $userDepartmentId)
-                            ->latest()
-                            ->first();
-                            
-                        if (!$derivation) {
-                            return false;
-                        }
-                        
-                        // Verificar si ya se marcó como recibido o rechazado
-                        $hasReceivedOrRejected = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
-                            ->whereIn('status', ['Recibido', 'Rechazado'])
-                            ->exists();
-                            
-                        return !$hasReceivedOrRejected;
-                    }),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\BulkAction::make('receiveBulk')
-                        ->label('Recibir seleccionados')
-                        ->icon('heroicon-o-check-circle')
-                        ->color('success')
-                        ->form([
-                            Forms\Components\Textarea::make('comments')
-                                ->label('Observaciones')
-                                ->placeholder('Ingrese alguna observación sobre la recepción de estos documentos...')
-                        ])
-                        ->action(function (\Illuminate\Support\Collection $records, array $data) {
-                            $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                            
-                            if (!$userDepartmentId) {
-                                Notification::make()
-                                    ->danger()
-                                    ->title('Error')
-                                    ->body('No se pudo determinar su departamento.')
-                                    ->send();
-                                return;
-                            }
-                            
-                            $count = 0;
-                            
-                            foreach ($records as $record) {                                // Buscar la última derivación dirigida a este departamento
-                                $derivation = $record->derivations()
-                                    ->where('destination_department_id', $userDepartmentId)
-                                    ->latest()
-                                    ->whereDoesntHave('details', function (Builder $detailsQuery) {
-                                        $detailsQuery->whereIn('status', ['Recibido', 'Rechazado']);
-                                    })
-                                    ->first();
-                                    
-                                if (!$derivation) {
-                                    continue;
-                                }
-                                
-                                // Registrar el comentario
-                                \App\Models\DerivationDetail::create([
-                                    'derivation_id' => $derivation->id,
-                                    'comments' => $data['comments'] ?? 'Documento recibido',
-                                    'user_id' => auth()->id(),
-                                    'status' => 'Recibido'
-                                ]);
-                                
-                                $count++;
-                            }
-                            
-                            if ($count > 0) {
-                                Notification::make()
-                                    ->success()
-                                    ->title('Documentos recibidos')
-                                    ->body("Se han marcado {$count} documentos como recibidos.")
-                                    ->send();
-                            } else {
-                                Notification::make()
-                                    ->warning()
-                                    ->title('Sin cambios')
-                                    ->body('No se encontraron documentos pendientes para recibir.')
-                                    ->send();
-                            }
                         }),
-                        
-                    Tables\Actions\BulkAction::make('rejectBulk')
-                        ->label('Rechazar seleccionados')
+                    Tables\Actions\Action::make('rejectDocument')
+                        ->label('Rechazar documento')
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Rechazar documento')
+                        ->modalDescription('¿Está seguro que desea rechazar este documento? Por favor, ingrese un comentario explicando la razón del rechazo.')
+                        ->modalSubmitActionLabel('Sí, rechazar')
+                        ->modalCancelActionLabel('No, cancelar')
                         ->form([
-                            Forms\Components\Textarea::make('comments')
-                                ->label('Motivo del rechazo')
-                                ->placeholder('Explique el motivo por el que rechaza estos documentos...')
+                            Forms\Components\Textarea::make('reject_reason')
+                                ->label('Razón del rechazo')
                                 ->required()
-                                ->validationMessages([
-                                    'required' => 'Debe proporcionar un motivo para rechazar los documentos.'
-                                ]),
+                                ->maxLength(255)
                         ])
-                        ->action(function (\Illuminate\Support\Collection $records, array $data) {
+                        ->visible(function (Document $record) {
+                            $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                            
+                            if (!$userDepartmentId) {
+                                return false;
+                            }
+                            
+                            $lastDerivation = $record->derivations()
+                                ->where('destination_department_id', $userDepartmentId)
+                                ->latest()
+                                ->first();
+                                
+                            if (!$lastDerivation) {
+                                return false;
+                            }
+                            
+                            $hasConfirmationDetail = \App\Models\DerivationDetail::where('derivation_id', $lastDerivation->id)
+                                ->whereIn('status', ['Recibido', 'Rechazado'])
+                                ->exists();
+                                
+                            return !$hasConfirmationDetail;
+                        })
+                        ->action(function (Document $record, array $data) {
                             $userDepartmentId = Auth::user()->employee->department_id ?? null;
                             
                             if (!$userDepartmentId) {
                                 Notification::make()
-                                    ->danger()
                                     ->title('Error')
-                                    ->body('No se pudo determinar su departamento.')
+                                    ->body('No tienes un departamento asignado.')
+                                    ->danger()
                                     ->send();
                                 return;
                             }
                             
-                            $count = 0;
-                            
-                            foreach ($records as $record) {                                // Buscar la última derivación dirigida a este departamento
-                                $derivation = $record->derivations()
-                                    ->where('destination_department_id', $userDepartmentId)
-                                    ->latest()
-                                    ->whereDoesntHave('details', function (Builder $detailsQuery) {
-                                        $detailsQuery->whereIn('status', ['Recibido', 'Rechazado']);
-                                    })
-                                    ->first();
-                                    
-                                if (!$derivation) {
-                                    continue;
-                                }
+                            $derivation = $record->derivations()
+                                ->where('destination_department_id', $userDepartmentId)
+                                ->latest()
+                                ->first();
                                 
-                                // Registrar el comentario
-                                \App\Models\DerivationDetail::create([
-                                    'derivation_id' => $derivation->id,
-                                    'comments' => $data['comments'] ?? 'Documento rechazado',
-                                    'user_id' => auth()->id(),
-                                    'status' => 'Rechazado'
-                                ]);
-                                
-                                $count++;
+                            if (!$derivation) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('No hay una derivación para este documento dirigida a tu departamento.')
+                                    ->danger()
+                                    ->send();
+                                return;
                             }
                             
-                            if ($count > 0) {
+                            $hasConfirmationDetail = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
+                                ->whereIn('status', ['Recibido', 'Rechazado'])
+                                ->exists();
+                                
+                            if ($hasConfirmationDetail) {
                                 Notification::make()
-                                    ->success()
-                                    ->title('Documentos rechazados')
-                                    ->body("Se han marcado {$count} documentos como rechazados.")
+                                    ->title('Error')
+                                    ->body('Este documento ya ha sido recibido o rechazado.')
+                                    ->danger()
                                     ->send();
-                            } else {
-                                Notification::make()
-                                    ->warning()
-                                    ->title('Sin cambios')
-                                    ->body('No se encontraron documentos pendientes para rechazar.')
-                                    ->send();
+                                return;
                             }
+                            
+                            $userName = auth()->user()->name;
+                            
+                            \App\Models\DerivationDetail::create([
+                                'derivation_id' => $derivation->id,
+                                'comments' => "El usuario {$userName} rechazó la recepción del documento. Razón: " . $data['reject_reason'],
+                                'user_id' => auth()->id(),
+                                'status' => 'Rechazado'
+                            ]);
+                            
+                            Notification::make()
+                                ->title('Documento rechazado')
+                                ->body('El documento ha sido rechazado con éxito.')
+                                ->success()
+                                ->send();
                         }),
-                ]),
+                ])->icon('heroicon-m-ellipsis-vertical'),
+            ])
+            ->bulkActions([
+                // No hay acciones masivas definidas
             ]);
     }
 
@@ -541,7 +368,7 @@ class ReceivedDocumentResource extends Resource
         $userDepartmentId = Auth::user()->employee->department_id ?? null;
         
         if (!$userDepartmentId) {
-            return parent::getEloquentQuery()->whereRaw('1 = 0'); // No mostrar ningún documento
+            return parent::getEloquentQuery()->whereRaw('1 = 0'); 
         }
         
         return parent::getEloquentQuery()
@@ -549,12 +376,11 @@ class ReceivedDocumentResource extends Resource
                 $query->where('destination_department_id', $userDepartmentId);
             });
     }
-
+    
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListReceivedDocuments::route('/'),
-            'view' => Pages\ViewReceivedDocument::route('/{record}'),
+            'index' => Pages\ManageReceivedDocuments::route('/'),
         ];
     }
 }

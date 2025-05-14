@@ -37,7 +37,6 @@ class ViewReceivedDocument extends ViewRecord
         
         $actions = [];
         
-        // Acción para ver el documento (si existe)
         if ($record->path && Storage::disk('public')->exists($record->path)) {
             $actions[] = Actions\Action::make('viewDocument')
                 ->label('Ver PDF')
@@ -47,7 +46,6 @@ class ViewReceivedDocument extends ViewRecord
                 ->openUrlInNewTab();
         }
         
-        // Acción para recibir (si hay una derivación pendiente)
         if ($hasPendingDerivation) {
             $actions[] = Actions\Action::make('receiveDocument')
                 ->label('Recibir')
@@ -84,7 +82,6 @@ class ViewReceivedDocument extends ViewRecord
                         return;
                     }
                     
-                    // Registrar el comentario con estado Recibido
                     \App\Models\DerivationDetail::create([
                         'derivation_id' => $derivation->id,
                         'comments' => $data['comments'] ?? 'Documento recibido',
@@ -125,7 +122,6 @@ class ViewReceivedDocument extends ViewRecord
                         return;
                     }
                     
-                    // Buscar la última derivación dirigida a este departamento
                     $derivation = $this->getRecord()->derivations()
                         ->where('destination_department_id', $userDepartmentId)
                         ->latest()
@@ -140,7 +136,6 @@ class ViewReceivedDocument extends ViewRecord
                         return;
                     }
                     
-                    // Registrar el comentario con estado Rechazado
                     \App\Models\DerivationDetail::create([
                         'derivation_id' => $derivation->id,
                         'comments' => $data['comments'],

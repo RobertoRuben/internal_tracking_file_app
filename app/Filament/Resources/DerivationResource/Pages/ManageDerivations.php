@@ -19,17 +19,13 @@ class ManageDerivations extends ManageRecords
             Actions\CreateAction::make()
                 ->label('Crear derivación')
                 ->using(function (array $data) {
-                    // Crear la derivación primero
                     $derivation = static::getResource()::getModel()::create($data);
                     
-                    // Obtener información del usuario y departamento destino
                     $user = auth()->user();
                     $destinationDepartment = \App\Models\Department::find($data['destination_department_id']);
                     
-                    // Crear mensaje personalizado para el estado "Enviado"
                     $systemMessage = "Documento enviado por {$user->name} al departamento {$destinationDepartment->name}.";
                     
-                    // Crear detalle con estado "Enviado" automáticamente
                     \App\Models\DerivationDetail::create([
                         'derivation_id' => $derivation->id,
                         'comments' => $systemMessage . (isset($data['comments']) && !empty($data['comments']) ? "\n\nObservaciones: {$data['comments']}" : ""),

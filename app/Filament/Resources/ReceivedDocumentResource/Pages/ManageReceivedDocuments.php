@@ -3,10 +3,10 @@
 namespace App\Filament\Resources\ReceivedDocumentResource\Pages;
 
 use App\Filament\Resources\ReceivedDocumentResource;
-use Filament\Resources\Pages\ListRecords;
 use Filament\Actions;
+use Filament\Resources\Pages\ManageRecords;
 
-class ListReceivedDocuments extends ListRecords
+class ManageReceivedDocuments extends ManageRecords
 {
     protected static string $resource = ReceivedDocumentResource::class;
 
