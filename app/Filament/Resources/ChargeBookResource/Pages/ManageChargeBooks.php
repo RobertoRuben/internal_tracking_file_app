@@ -16,7 +16,7 @@ class ManageChargeBooks extends ManageRecords
     {
         return [
             Actions\CreateAction::make()
-                ->label('Registrar documento')
+                ->label('Registrar cargo')
                 ->icon('heroicon-o-plus-circle')
                 ->successNotification(
                     Notification::make()

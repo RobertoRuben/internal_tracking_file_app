@@ -93,7 +93,7 @@ class ChargeBookResource extends Resource
                         Forms\Components\Hidden::make('sender_user_id')
                             ->required(),
                         Forms\Components\Placeholder::make('sender_department_name')
-                            ->label('Departamento remitente')
+                            ->label('Origen')
                             ->content(function (callable $get) {
                                 $departmentId = $get('sender_department_id');
                                 if (!$departmentId) {
@@ -104,7 +104,7 @@ class ChargeBookResource extends Resource
                                 return $department ? $department->name : 'Departamento no encontrado';
                             }),
                         Forms\Components\Placeholder::make('sender_user_name')
-                            ->label('Usuario remitente')
+                            ->label('Enviado por')
                             ->content(function (callable $get) {
                                 $userId = $get('sender_user_id');
                                 if (!$userId) {
@@ -152,15 +152,18 @@ class ChargeBookResource extends Resource
                     ->label('Nombre del documento')
                     ->limit(30)
                     ->tooltip(fn(ChargeBook $record): string => $record->document->name ?? '')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('senderDepartment.name')
-                    ->label('Departamento remitente')
+                    ->label('Origen')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('senderUser.name')
-                    ->label('Usuario remitente')
+                    ->label('Enviado por')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('receiverUser.name')
                     ->label('Recibido por')
                     ->searchable()
@@ -172,47 +175,76 @@ class ChargeBookResource extends Resource
                     ->sortable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('document_id')
-                    ->label('Documento')
-                    ->relationship('document', 'name')
-                    ->searchable()
-                    ->preload(),
                 Tables\Filters\SelectFilter::make('sender_department_id')
-                    ->label('Departamento remitente')
+                    ->label('Departamento de Origen')
                     ->relationship('senderDepartment', 'name')
                     ->searchable()
                     ->preload(),
                 Tables\Filters\SelectFilter::make('sender_user_id')
-                    ->label('Usuario remitente')
+                    ->label('Enviado por')
                     ->relationship('senderUser', 'name')
                     ->searchable()
                     ->preload(),
+                Tables\Filters\Filter::make('created_at')
+                    ->label('Fecha de recepción')
+                    ->form([
+                        Forms\Components\DatePicker::make('created_from')
+                            ->label('Desde'),
+                        Forms\Components\DatePicker::make('created_until')
+                            ->label('Hasta'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['created_from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['created_until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+                        
+                        if ($data['created_from'] ?? null) {
+                            $indicators['created_from'] = 'Registros desde ' . $data['created_from'];
+                        }
+                        
+                        if ($data['created_until'] ?? null) {
+                            $indicators['created_until'] = 'Registros hasta ' . $data['created_until'];
+                        }
+                        
+                        return $indicators;
+                    }),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
-                Tables\Actions\Action::make('download_document')
-                    ->label('Ver documento')
-                    ->icon('heroicon-o-document-text')
-                    ->color('success')
-                    ->url(fn (ChargeBook $record): string => asset('storage/' . $record->document->path))
-                    ->openUrlInNewTab()
-                    ->visible(fn (ChargeBook $record): bool => $record->document && $record->document->path && file_exists(storage_path('app/public/' . $record->document->path))),
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar')
-                    ->requiresConfirmation()
-                    ->modalHeading('Eliminar registro')
-                    ->modalDescription('¿Está seguro que desea eliminar este registro del cuaderno de cargos? Esta acción no se puede deshacer.')
-                    ->modalSubmitActionLabel('Sí, eliminar')
-                    ->modalCancelActionLabel('No, cancelar')
-                    ->successNotification(
-                        Notification::make()
-                            ->success()
-                            ->title('Registro eliminado')
-                            ->body('El registro ha sido eliminado del cuaderno de cargos.')
-                    ),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver'),
+                    Tables\Actions\EditAction::make()
+                        ->label('Editar'),
+                    Tables\Actions\Action::make('download_document')
+                        ->label('Ver documento')
+                        ->icon('heroicon-o-document-text')
+                        ->color('success')
+                        ->url(fn (ChargeBook $record): string => asset('storage/' . $record->document->path))
+                        ->openUrlInNewTab()
+                        ->visible(fn (ChargeBook $record): bool => $record->document && $record->document->path && file_exists(storage_path('app/public/' . $record->document->path))),
+                    Tables\Actions\DeleteAction::make()
+                        ->label('Eliminar')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar registro')
+                        ->modalDescription('¿Está seguro que desea eliminar este registro del cuaderno de cargos? Esta acción no se puede deshacer.')
+                        ->modalSubmitActionLabel('Sí, eliminar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->successNotification(
+                            Notification::make()
+                                ->success()
+                                ->title('Registro eliminado')
+                                ->body('El registro ha sido eliminado del cuaderno de cargos.')
+                        ),
+                ])->tooltip('Acciones')->icon('heroicon-m-ellipsis-vertical'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

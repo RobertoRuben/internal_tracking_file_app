@@ -187,7 +187,18 @@ class DocumentResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('registered_by_user_id')
                     ->label('Registrado por')
-                    ->relationship('registeredBy', 'name')
+                    ->relationship('registeredBy', 'name', function (Builder $query) {
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if ($userDepartmentId) {
+                            // Buscar usuarios que pertenecen al mismo departamento
+                            $query->whereHas('employee', function ($subQuery) use ($userDepartmentId) {
+                                $subQuery->where('department_id', $userDepartmentId);
+                            });
+                        }
+                        
+                        return $query;
+                    })
                     ->searchable()
                     ->preload(),
                 Tables\Filters\TernaryFilter::make('is_derived')

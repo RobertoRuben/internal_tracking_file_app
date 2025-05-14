@@ -13,7 +13,6 @@ class Derivation extends Model
         'destination_department_id',
         'document_id',
         'derivated_by_user_id',
-        'status',
     ];
 
     protected static function booted(): void

@@ -26,23 +26,10 @@ class DerivationResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Estado de la derivación')
+                Forms\Components\Section::make('Información de la derivación')
                     ->icon('heroicon-o-check-circle')
-                    ->description('Información del estado')
+                    ->description('Información general')
                     ->schema([
-                        Forms\Components\Select::make('status')
-                            ->label('Estado')
-                            ->options([
-                                'Enviado'   => 'Enviado',
-                                'Recibido'  => 'Recibido',
-                                'Rechazado' => 'Rechazado',
-                            ])
-                            ->default('Enviado')
-                            ->required()
-                            ->validationMessages([
-                                'required' => 'Debe seleccionar un estado.',
-                            ]),
-
                         Forms\Components\Textarea::make('comments')
                             ->label('Observaciones')
                             ->placeholder('Ingrese alguna observación o comentario sobre esta derivación...')
@@ -125,14 +112,6 @@ class DerivationResource extends Resource
                     ->label('Derivado por')
                     ->searchable()
                     ->sortable(),
-
-                Tables\Columns\BadgeColumn::make('status')
-                    ->label('Estado')
-                    ->colors([
-                        'warning' => 'Enviado',
-                        'success' => 'Recibido',
-                        'danger'  => 'Rechazado',
-                    ]),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Fecha de derivación')

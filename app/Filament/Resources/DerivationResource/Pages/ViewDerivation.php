@@ -39,24 +39,12 @@ class ViewDerivation extends ViewRecord
                     ->icon('heroicon-o-arrow-path')
                     ->description('Detalles de la derivación')
                     ->columns(2)
-                    ->schema([
-                        Components\TextEntry::make('originDepartment.name')
+                    ->schema([                        Components\TextEntry::make('originDepartment.name')
                             ->label('Departamento de origen'),
                         Components\TextEntry::make('destinationDepartment.name')
                             ->label('Departamento de destino'),
                         Components\TextEntry::make('derivatedBy.name')
                             ->label('Derivado por'),
-                        Components\TextEntry::make('status')
-                            ->label('Estado')
-                            ->badge()
-                            ->color(function ($state) {
-                                return match ($state) {
-                                    'Pendiente' => 'warning',
-                                    'Recibido' => 'success',
-                                    'Rechazado' => 'danger',
-                                    default => 'gray',
-                                };
-                            }),
                         Components\TextEntry::make('created_at')
                             ->label('Fecha de derivación')
                             ->dateTime('d/m/Y H:i')
@@ -74,19 +62,9 @@ class ViewDerivation extends ViewRecord
                     ->schema([
                         Components\RepeatableEntry::make('details')
                             ->label(false)
-                            ->schema([
-                                Components\TextEntry::make('created_at')
+                            ->schema([                                Components\TextEntry::make('created_at')
                                     ->label('Fecha')
                                     ->dateTime('d/m/Y H:i'),
-                                Components\TextEntry::make('status')
-                                    ->label('Estado')
-                                    ->badge()
-                                    ->color(fn($state) => match($state) {
-                                        'Pendiente' => 'warning',
-                                        'Recibido' => 'success',
-                                        'Rechazado' => 'danger',
-                                        default => 'gray',
-                                    }),
                                 Components\TextEntry::make('user.name')
                                     ->label('Usuario'),
                                 Components\TextEntry::make('comments')
@@ -97,49 +75,11 @@ class ViewDerivation extends ViewRecord
                             ->columns(3),
                     ]),
             ]);
-    }
-
-    protected function getHeaderActions(): array
+    }    protected function getHeaderActions(): array
     {
         return [
             Actions\EditAction::make()
                 ->label('Editar'),
-            Actions\Action::make('changeStatus')
-                ->label('Cambiar estado')
-                ->icon('heroicon-o-check-badge')
-                ->color('warning')
-                ->form([
-                    Forms\Components\Select::make('status')
-                        ->label('Nuevo estado')
-                        ->options([
-                            'Pendiente' => 'Pendiente',
-                            'Recibido' => 'Recibido',
-                            'Rechazado' => 'Rechazado',
-                        ])
-                        ->required(),
-                    Forms\Components\Textarea::make('comments')
-                        ->label('Observaciones')
-                        ->placeholder('Ingrese alguna observación sobre este cambio de estado...'),
-                ])
-                ->action(function (array $data): void {
-                    // Actualizar el estado de la derivación
-                    $this->record->update(['status' => $data['status']]);
-                    
-                    // Guardar el comentario si se proporcionó
-                    if (isset($data['comments']) && !empty($data['comments'])) {
-                        $this->record->details()->create([
-                            'comments' => $data['comments'],
-                            'user_id' => Auth::id(),
-                            'status' => $data['status']
-                        ]);
-                    }
-    
-                    Notification::make()
-                        ->title('Estado actualizado')
-                        ->body("La derivación ha sido marcada como {$data['status']}.")
-                        ->success()
-                        ->send();
-                }),
         ];
     }
 }

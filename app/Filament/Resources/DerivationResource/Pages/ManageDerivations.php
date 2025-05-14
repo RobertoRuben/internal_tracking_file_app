@@ -29,7 +29,7 @@ class ManageDerivations extends ManageRecords
                             'derivation_id' => $derivation->id,
                             'comments' => $data['comments'],
                             'user_id' => auth()->id(),
-                            'status' => $data['status'] ?? 'Pendiente'
+                            'status' => 'Creado'
                         ]);
                     }
                     
