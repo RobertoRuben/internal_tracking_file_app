@@ -23,15 +23,22 @@ class EditDerivation extends EditRecord
                 ->modalCancelActionLabel('No, cancelar'),
             Actions\ViewAction::make(),
         ];
-    }      protected function afterSave(): void
+    }    protected function afterSave(): void
     {
         // Guardar el comentario si se proporcionó
         if ($this->data['comments'] ?? false) {
+            // Obtener información del usuario y departamento destino
+            $user = auth()->user();
+            $destinationDepartment = $this->record->destinationDepartment;
+            
+            // Crear mensaje personalizado para la actualización
+            $systemMessage = "Información actualizada por {$user->name}.";
+            
             \App\Models\DerivationDetail::create([
                 'derivation_id' => $this->record->id,
-                'comments' => $this->data['comments'],
+                'comments' => $systemMessage . "\n\nObservaciones: {$this->data['comments']}",
                 'user_id' => Auth::id(),
-                'status' => 'Actualizado'
+                'status' => 'Modificado'
             ]);
         }
         

@@ -14,16 +14,25 @@ class ViewReceivedDocument extends ViewRecord
     protected static string $resource = ReceivedDocumentResource::class;
 
     protected function getHeaderActions(): array
-    {
-        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+    {        $userDepartmentId = Auth::user()->employee->department_id ?? null;
         $record = $this->getRecord();
         $hasPendingDerivation = false;
         
         if ($userDepartmentId) {
-            $hasPendingDerivation = $record->derivations()
+            // Verificar derivaciones dirigidas a este departamento que no tengan detalle de 'Recibido' o 'Rechazado'
+            $derivation = $record->derivations()
                 ->where('destination_department_id', $userDepartmentId)
-                ->where('status', 'Enviado')
-                ->exists();
+                ->latest()
+                ->first();
+                
+            if ($derivation) {
+                // Verificar si existe algún detalle con estado Recibido o Rechazado
+                $hasReceivedOrRejected = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
+                    ->whereIn('status', ['Recibido', 'Rechazado'])
+                    ->exists();
+                    
+                $hasPendingDerivation = !$hasReceivedOrRejected;
+            }
         }
         
         $actions = [];
@@ -48,8 +57,7 @@ class ViewReceivedDocument extends ViewRecord
                     \Filament\Forms\Components\Textarea::make('comments')
                         ->label('Observaciones')
                         ->placeholder('Ingrese alguna observación sobre la recepción del documento...')
-                ])
-                ->action(function (array $data): void {
+                ])                ->action(function (array $data): void {
                     $userDepartmentId = Auth::user()->employee->department_id ?? null;
                     
                     if (!$userDepartmentId) {
@@ -64,7 +72,6 @@ class ViewReceivedDocument extends ViewRecord
                     // Buscar la última derivación dirigida a este departamento
                     $derivation = $this->getRecord()->derivations()
                         ->where('destination_department_id', $userDepartmentId)
-                        ->where('status', 'Enviado')
                         ->latest()
                         ->first();
                         
@@ -77,10 +84,7 @@ class ViewReceivedDocument extends ViewRecord
                         return;
                     }
                     
-                    // Actualizar el estado de la derivación
-                    $derivation->update(['status' => 'Recibido']);
-                    
-                    // Registrar el comentario
+                    // Registrar el comentario con estado Recibido
                     \App\Models\DerivationDetail::create([
                         'derivation_id' => $derivation->id,
                         'comments' => $data['comments'] ?? 'Documento recibido',
@@ -109,8 +113,7 @@ class ViewReceivedDocument extends ViewRecord
                         ->validationMessages([
                             'required' => 'Debe proporcionar un motivo para rechazar el documento.'
                         ]),
-                ])
-                ->action(function (array $data): void {
+                ])                ->action(function (array $data): void {
                     $userDepartmentId = Auth::user()->employee->department_id ?? null;
                     
                     if (!$userDepartmentId) {
@@ -125,7 +128,6 @@ class ViewReceivedDocument extends ViewRecord
                     // Buscar la última derivación dirigida a este departamento
                     $derivation = $this->getRecord()->derivations()
                         ->where('destination_department_id', $userDepartmentId)
-                        ->where('status', 'Enviado')
                         ->latest()
                         ->first();
                         
@@ -138,10 +140,7 @@ class ViewReceivedDocument extends ViewRecord
                         return;
                     }
                     
-                    // Actualizar el estado de la derivación
-                    $derivation->update(['status' => 'Rechazado']);
-                    
-                    // Registrar el comentario
+                    // Registrar el comentario con estado Rechazado
                     \App\Models\DerivationDetail::create([
                         'derivation_id' => $derivation->id,
                         'comments' => $data['comments'],

@@ -73,8 +73,7 @@ class ReceivedDocumentResource extends Resource
                 Tables\Columns\TextColumn::make('employee.full_name')
                     ->label('Empleado remitente')
                     ->searchable()
-                    ->sortable(),
-                Tables\Columns\BadgeColumn::make('derivation_status')
+                    ->sortable(),                Tables\Columns\BadgeColumn::make('derivation_status')
                     ->label('Estado')
                     ->getStateUsing(function (Document $record) {
                         $userDepartmentId = Auth::user()->employee->department_id ?? null;
@@ -89,7 +88,21 @@ class ReceivedDocumentResource extends Resource
                             ->latest()
                             ->first();
                             
-                        return $lastDerivation ? $lastDerivation->status : 'Sin estado';
+                        if (!$lastDerivation) {
+                            return 'Sin estado';
+                        }
+                        
+                        // Verificar el estado según los detalles
+                        $lastDetail = \App\Models\DerivationDetail::where('derivation_id', $lastDerivation->id)
+                            ->whereIn('status', ['Recibido', 'Rechazado'])
+                            ->latest()
+                            ->first();
+                            
+                        if ($lastDetail) {
+                            return $lastDetail->status;
+                        }
+                        
+                        return 'Enviado'; // Estado por defecto si no hay detalles de recibido o rechazado
                     })
                     ->colors([
                         'warning' => 'Enviado',
@@ -106,8 +119,7 @@ class ReceivedDocumentResource extends Resource
                     ->label('Departamento de origen')
                     ->relationship('creatorDepartment', 'name')
                     ->searchable()
-                    ->preload(),
-                Tables\Filters\SelectFilter::make('derivation_status')
+                    ->preload(),                Tables\Filters\SelectFilter::make('derivation_status')
                     ->label('Estado de derivación')
                     ->options([
                         'Enviado' => 'Enviado',
@@ -125,9 +137,13 @@ class ReceivedDocumentResource extends Resource
                             return $query;
                         }
                         
-                        return $query->whereHas('derivations', function (Builder $subQuery) use ($data, $userDepartmentId) {
-                            $subQuery->where('destination_department_id', $userDepartmentId)
-                                    ->where('status', $data['value']);
+                        $status = $data['value'];
+                        
+                        return $query->whereHas('derivations', function (Builder $derivationQuery) use ($status, $userDepartmentId) {
+                            $derivationQuery->where('destination_department_id', $userDepartmentId)
+                                ->whereHas('details', function (Builder $detailsQuery) use ($status) {
+                                    $detailsQuery->where('status', $status);
+                                });
                         });
                     }),
             ])
@@ -177,23 +193,26 @@ class ReceivedDocumentResource extends Resource
                                 ->body('No se encontró una derivación para este documento.')
                                 ->send();
                             return;
-                        }
-                        
-                        try {
-                            // 1. Primero cambiamos el estado a "Recibido" si no lo está
-                            if ($derivation->status === 'Enviado') {
-                                $derivation->update(['status' => 'Recibido']);
+                        }                          try {
+                            // Registrar el comentario de recepción si no existe ya
+                            $hasReceivedDetail = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
+                                ->where('status', 'Recibido')
+                                ->exists();
                                 
-                                // Registrar el comentario de recepción
+                            if (!$hasReceivedDetail) {
+                                // Obtener nombre del usuario actual
+                                $userName = auth()->user()->name;
+                                
+                                // Registrar el comentario de recepción con mensaje personalizado
                                 \App\Models\DerivationDetail::create([
                                     'derivation_id' => $derivation->id,
-                                    'comments' => 'Documento recibido y registrado en cuaderno de cargos',
+                                    'comments' => "El usuario {$userName} confirmó la recepción del documento, y este documento fue registrado en su cuaderno de cargos",
                                     'user_id' => auth()->id(),
                                     'status' => 'Recibido'
                                 ]);
                             }
                             
-                            // 2. Creamos el registro en el cuaderno de cargos
+                            // Creamos el registro en el cuaderno de cargos
                             $chargeBook = \App\Models\ChargeBook::create([
                                 'document_id' => $record->id,
                                 'sender_department_id' => $derivation->origin_department_id,
@@ -242,8 +261,7 @@ class ReceivedDocumentResource extends Resource
                         Forms\Components\Textarea::make('comments')
                             ->label('Observaciones')
                             ->placeholder('Ingrese alguna observación sobre la recepción del documento...')
-                    ])
-                    ->action(function (Document $record, array $data) {
+                    ])                    ->action(function (Document $record, array $data) {
                         $userDepartmentId = Auth::user()->employee->department_id ?? null;
                         
                         if (!$userDepartmentId) {
@@ -258,7 +276,6 @@ class ReceivedDocumentResource extends Resource
                         // Buscar la última derivación dirigida a este departamento
                         $derivation = $record->derivations()
                             ->where('destination_department_id', $userDepartmentId)
-                            ->where('status', 'Enviado')
                             ->latest()
                             ->first();
                             
@@ -270,9 +287,6 @@ class ReceivedDocumentResource extends Resource
                                 ->send();
                             return;
                         }
-                        
-                        // Actualizar el estado de la derivación
-                        $derivation->update(['status' => 'Recibido']);
                         
                         // Registrar el comentario
                         \App\Models\DerivationDetail::create([
@@ -295,13 +309,23 @@ class ReceivedDocumentResource extends Resource
                             return false;
                         }
                         
-                        // Verificar si hay una derivación pendiente
-                        return $record->derivations()
+                        // Verificar si hay una derivación pendiente (sin registro de Recibido o Rechazado)
+                        $derivation = $record->derivations()
                             ->where('destination_department_id', $userDepartmentId)
-                            ->where('status', 'Enviado')
+                            ->latest()
+                            ->first();
+                            
+                        if (!$derivation) {
+                            return false;
+                        }
+                        
+                        // Verificar si ya se marcó como recibido o rechazado
+                        $hasReceivedOrRejected = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
+                            ->whereIn('status', ['Recibido', 'Rechazado'])
                             ->exists();
-                    }),
-                Tables\Actions\Action::make('rejectDocument')
+                            
+                        return !$hasReceivedOrRejected;
+                    }),Tables\Actions\Action::make('rejectDocument')
                     ->label('Rechazar')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
@@ -313,8 +337,7 @@ class ReceivedDocumentResource extends Resource
                             ->validationMessages([
                                 'required' => 'Debe proporcionar un motivo para rechazar el documento.'
                             ]),
-                    ])
-                    ->action(function (Document $record, array $data) {
+                    ])                    ->action(function (Document $record, array $data) {
                         $userDepartmentId = Auth::user()->employee->department_id ?? null;
                         
                         if (!$userDepartmentId) {
@@ -329,7 +352,6 @@ class ReceivedDocumentResource extends Resource
                         // Buscar la última derivación dirigida a este departamento
                         $derivation = $record->derivations()
                             ->where('destination_department_id', $userDepartmentId)
-                            ->where('status', 'Enviado')
                             ->latest()
                             ->first();
                             
@@ -342,10 +364,7 @@ class ReceivedDocumentResource extends Resource
                             return;
                         }
                         
-                        // Actualizar el estado de la derivación
-                        $derivation->update(['status' => 'Rechazado']);
-                        
-                        // Registrar el comentario
+                        // Registrar el comentario con estado Rechazado
                         \App\Models\DerivationDetail::create([
                             'derivation_id' => $derivation->id,
                             'comments' => $data['comments'],
@@ -366,11 +385,22 @@ class ReceivedDocumentResource extends Resource
                             return false;
                         }
                         
-                        // Verificar si hay una derivación pendiente
-                        return $record->derivations()
+                        // Verificar si hay una derivación pendiente (sin registro de Recibido o Rechazado)
+                        $derivation = $record->derivations()
                             ->where('destination_department_id', $userDepartmentId)
-                            ->where('status', 'Enviado')
+                            ->latest()
+                            ->first();
+                            
+                        if (!$derivation) {
+                            return false;
+                        }
+                        
+                        // Verificar si ya se marcó como recibido o rechazado
+                        $hasReceivedOrRejected = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
+                            ->whereIn('status', ['Recibido', 'Rechazado'])
                             ->exists();
+                            
+                        return !$hasReceivedOrRejected;
                     }),
             ])
             ->bulkActions([
@@ -398,20 +428,18 @@ class ReceivedDocumentResource extends Resource
                             
                             $count = 0;
                             
-                            foreach ($records as $record) {
-                                // Buscar la última derivación dirigida a este departamento
+                            foreach ($records as $record) {                                // Buscar la última derivación dirigida a este departamento
                                 $derivation = $record->derivations()
                                     ->where('destination_department_id', $userDepartmentId)
-                                    ->where('status', 'Enviado')
                                     ->latest()
+                                    ->whereDoesntHave('details', function (Builder $detailsQuery) {
+                                        $detailsQuery->whereIn('status', ['Recibido', 'Rechazado']);
+                                    })
                                     ->first();
                                     
                                 if (!$derivation) {
                                     continue;
                                 }
-                                
-                                // Actualizar el estado de la derivación
-                                $derivation->update(['status' => 'Recibido']);
                                 
                                 // Registrar el comentario
                                 \App\Models\DerivationDetail::create([
@@ -466,25 +494,23 @@ class ReceivedDocumentResource extends Resource
                             
                             $count = 0;
                             
-                            foreach ($records as $record) {
-                                // Buscar la última derivación dirigida a este departamento
+                            foreach ($records as $record) {                                // Buscar la última derivación dirigida a este departamento
                                 $derivation = $record->derivations()
                                     ->where('destination_department_id', $userDepartmentId)
-                                    ->where('status', 'Enviado')
                                     ->latest()
+                                    ->whereDoesntHave('details', function (Builder $detailsQuery) {
+                                        $detailsQuery->whereIn('status', ['Recibido', 'Rechazado']);
+                                    })
                                     ->first();
                                     
                                 if (!$derivation) {
                                     continue;
                                 }
                                 
-                                // Actualizar el estado de la derivación
-                                $derivation->update(['status' => 'Rechazado']);
-                                
                                 // Registrar el comentario
                                 \App\Models\DerivationDetail::create([
                                     'derivation_id' => $derivation->id,
-                                    'comments' => $data['comments'],
+                                    'comments' => $data['comments'] ?? 'Documento rechazado',
                                     'user_id' => auth()->id(),
                                     'status' => 'Rechazado'
                                 ]);

@@ -277,17 +277,22 @@ class DocumentResource extends Resource
                                 'origin_department_id' => Auth::user()->employee->department_id ?? null,
                                 'destination_department_id' => $data['destination_department_id'],
                                 'derivated_by_user_id' => Auth::id(),
-                                'status' => 'Enviado',
                             ]);
 
-                            if (isset($data['comments']) && !empty($data['comments'])) {
-                                \App\Models\DerivationDetail::create([
-                                    'derivation_id' => $derivation->id,
-                                    'comments' => $data['comments'] ?? 'Documento derivado',
-                                    'user_id' => Auth::id(),
-                                    'status' => 'Enviado'
-                                ]);
-                            }
+                            // Obtener información del usuario y departamento destino
+                            $user = auth()->user();
+                            $destinationDepartment = \App\Models\Department::find($data['destination_department_id']);
+                            
+                            // Crear mensaje personalizado para el estado "Enviado"
+                            $systemMessage = "Documento enviado por {$user->name} al departamento {$destinationDepartment->name}.";
+                            
+                            // Crear detalle con estado "Enviado" automáticamente
+                            \App\Models\DerivationDetail::create([
+                                'derivation_id' => $derivation->id,
+                                'comments' => $systemMessage . (isset($data['comments']) && !empty($data['comments']) ? "\n\nObservaciones: {$data['comments']}" : ""),
+                                'user_id' => auth()->id(),
+                                'status' => 'Enviado'
+                            ]);
 
                             $record->update(['is_derived' => true]);
 
@@ -407,17 +412,22 @@ class DocumentResource extends Resource
                                     'origin_department_id' => Auth::user()->employee->department_id ?? null,
                                     'destination_department_id' => $data['destination_department_id'],
                                     'derivated_by_user_id' => Auth::id(),
-                                    'status' => 'Enviado',
                                 ]);
 
-                                if (isset($data['comments']) && !empty($data['comments'])) {
-                                    \App\Models\DerivationDetail::create([
-                                        'derivation_id' => $derivation->id,
-                                        'comments' => $data['comments'] ?? 'Documento derivado',
-                                        'user_id' => Auth::id(),
-                                        'status' => 'Enviado'
-                                    ]);
-                                }
+                                // Obtener información del usuario y departamento destino
+                                $user = auth()->user();
+                                $destinationDepartment = \App\Models\Department::find($data['destination_department_id']);
+                                
+                                // Crear mensaje personalizado para el estado "Enviado"
+                                $systemMessage = "Documento enviado por {$user->name} al departamento {$destinationDepartment->name}.";
+                                
+                                // Crear detalle con estado "Enviado" automáticamente
+                                \App\Models\DerivationDetail::create([
+                                    'derivation_id' => $derivation->id,
+                                    'comments' => $systemMessage . (isset($data['comments']) && !empty($data['comments']) ? "\n\nObservaciones: {$data['comments']}" : ""),
+                                    'user_id' => auth()->id(),
+                                    'status' => 'Enviado'
+                                ]);
 
                                 $record->update(['is_derived' => true]);
                             });
