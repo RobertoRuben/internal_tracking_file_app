@@ -49,12 +49,34 @@ class DerivationResource extends Resource
                             ->options(function () {
                                 $userDepartmentId = Auth::user()->employee->department_id ?? null;
 
-                                return \App\Models\Document::where('is_derived', false)
-                                    ->where('created_by_department_id', $userDepartmentId)
-                                    ->get()
-                                    ->mapWithKeys(function ($document) {
-                                        return [$document->id => "{$document->doc_code} - {$document->name}"];
-                                    });
+                                // Obtenemos documentos creados por el departamento del usuario
+                                $documents = \App\Models\Document::where('created_by_department_id', $userDepartmentId)
+                                    ->with(['derivations.details'])
+                                    ->get();
+                                
+                                // Filtramos para incluir solo documentos que nunca han sido derivados
+                                // o que tienen al menos una derivación con estado "Rechazado"
+                                $filteredDocuments = $documents->filter(function ($document) {
+                                    // Si no tiene derivaciones, se puede derivar
+                                    if ($document->derivations->isEmpty()) {
+                                        return true;
+                                    }
+                                    
+                                    // Verificar si alguna derivación tiene un detalle con estado "Rechazado"
+                                    foreach ($document->derivations as $derivation) {
+                                        foreach ($derivation->details as $detail) {
+                                            if ($detail->status === 'Rechazado') {
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    
+                                    return false;
+                                });
+                                
+                                return $filteredDocuments->mapWithKeys(function ($document) {
+                                    return [$document->id => "{$document->doc_code} - {$document->name}"];
+                                });
                             })
                             ->disabled(fn(string $operation): bool => $operation === 'edit')
                             ->dehydrated()
@@ -118,6 +140,19 @@ class DerivationResource extends Resource
                     ->label('Derivado por')
                     ->searchable()
                     ->sortable(),
+
+                Tables\Columns\BadgeColumn::make('estado')
+                    ->label('Estado')
+                    ->getStateUsing(function (Derivation $record) {
+                        // Buscamos si tiene algún detalle con estado "Rechazado"
+                        $rechazado = $record->details()->where('status', 'Rechazado')->exists();
+                        
+                        return $rechazado ? 'Rechazado' : 'Vigente';
+                    })
+                    ->colors([
+                        'success' => 'Vigente',
+                        'danger' => 'Rechazado',
+                    ]),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Fecha de derivación')
@@ -197,6 +232,8 @@ class DerivationResource extends Resource
                                         ->relationship(
                                             'document',
                                             'doc_code',
+                                            fn(Builder $query) => $query
+                                                ->where('created_by_department_id', Auth::user()->employee->department_id ?? null)
                                         )
                                         ->getOptionLabelFromRecordUsing(fn($record) => "{$record->doc_code} - {$record->name}")
                                         ->dehydrated()
