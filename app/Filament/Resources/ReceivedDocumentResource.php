@@ -66,17 +66,16 @@ class ReceivedDocumentResource extends Resource
                     ->searchable()
                     ->limit(30)
                     ->tooltip(fn(Document $record): string => $record->subject)
-                    ->toggleable(),
-                Tables\Columns\TextColumn::make('creatorDepartment.name')
+                    ->toggleable(),                Tables\Columns\TextColumn::make('creatorDepartment.name')
                     ->label('Origen')
                     ->searchable()
                     ->sortable()
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('employee.full_name')
+                Tables\Columns\TextColumn::make('registeredBy.employee.full_name')
                     ->label('Enviado por')
                     ->searchable()
                     ->sortable()
-                    ->toggleable(),                
+                    ->toggleable(),
                 Tables\Columns\BadgeColumn::make('derivation_status')
                     ->label('Estado')
                     ->getStateUsing(function (Document $record) {
@@ -248,9 +247,10 @@ class ReceivedDocumentResource extends Resource
                             });
                         }
                     })
-            ])
-            ->actions([
+            ])            ->actions([
                 Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver detalles'),
                     Tables\Actions\Action::make('download')
                         ->label('Ver documento')
                         ->icon('heroicon-o-document-text')
@@ -452,8 +452,7 @@ class ReceivedDocumentResource extends Resource
                 $query->where('destination_department_id', $userDepartmentId);
             });
     }
-    
-    public static function getPages(): array
+      public static function getPages(): array
     {
         return [
             'index' => Pages\ManageReceivedDocuments::route('/'),
