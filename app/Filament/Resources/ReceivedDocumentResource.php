@@ -20,9 +20,9 @@ class ReceivedDocumentResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-inbox-arrow-down';
 
-    protected static ?string $modelLabel = 'Documento recibido';
+    protected static ?string $modelLabel = 'Inbox';
 
-    protected static ?string $pluralModelLabel = 'Documentos recibidos';
+    protected static ?string $pluralModelLabel = 'Inbox';
 
     protected static ?string $navigationGroup = 'Gestión documental';
 
@@ -146,6 +146,33 @@ class ReceivedDocumentResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])->filters([
+                Tables\Filters\SelectFilter::make('derivation_status')
+                    ->label('Estado')
+                    ->options([
+                        'Enviado' => 'Enviado',
+                        'Recibido' => 'Recibido',
+                        'Rechazado' => 'Rechazado',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if (!isset($data['value']) || $data['value'] === '') {
+                            return $query;
+                        }
+
+                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
+
+                        if (!$userDepartmentId) {
+                            return $query;
+                        }
+
+                        $status = $data['value'];
+
+                        return $query->whereHas('derivations', function (Builder $derivationQuery) use ($status, $userDepartmentId) {
+                            $derivationQuery->where('destination_department_id', $userDepartmentId)
+                                ->whereHas('details', function (Builder $detailsQuery) use ($status) {
+                                    $detailsQuery->where('status', $status);
+                                });
+                        });
+                    }),
                 Tables\Filters\Filter::make('derivation_date')
                     ->label('Fecha de envío')
                     ->form([
@@ -340,8 +367,7 @@ class ReceivedDocumentResource extends Resource
                                 ->title('Éxito')
                                 ->body('El documento ha sido recibido y registrado en tu cuaderno de cargos.')
                                 ->success()
-                                ->send();
-                        }),
+                                ->send();                        }),
                     Tables\Actions\Action::make('rejectDocument')
                         ->label('Rechazar documento')
                         ->icon('heroicon-o-x-circle')
@@ -356,8 +382,7 @@ class ReceivedDocumentResource extends Resource
                                 ->label('Razón del rechazo')
                                 ->required()
                                 ->maxLength(255)
-                        ])
-                        ->visible(function (Document $record) {
+                        ])->visible(function (Document $record) {
                             $userDepartmentId = Auth::user()->employee->department_id ?? null;
 
                             if (!$userDepartmentId) {
@@ -369,15 +394,8 @@ class ReceivedDocumentResource extends Resource
                                 ->latest()
                                 ->first();
 
-                            if (!$lastDerivation) {
-                                return false;
-                            }
-
-                            $hasConfirmationDetail = \App\Models\DerivationDetail::where('derivation_id', $lastDerivation->id)
-                                ->whereIn('status', ['Recibido', 'Rechazado'])
-                                ->exists();
-
-                            return !$hasConfirmationDetail;
+                            // Solo verificamos que exista una derivación
+                            return $lastDerivation !== null;
                         })
                         ->action(function (Document $record, array $data) {
                             $userDepartmentId = Auth::user()->employee->department_id ?? null;
@@ -403,21 +421,12 @@ class ReceivedDocumentResource extends Resource
                                     ->danger()
                                     ->send();
                                 return;
-                            }
-
+                            }                            // Verificamos si ya existe un detalle, pero procedemos igualmente
                             $hasConfirmationDetail = \App\Models\DerivationDetail::where('derivation_id', $derivation->id)
                                 ->whereIn('status', ['Recibido', 'Rechazado'])
                                 ->exists();
 
-                            if ($hasConfirmationDetail) {
-                                Notification::make()
-                                    ->title('Error')
-                                    ->body('Este documento ya ha sido recibido o rechazado.')
-                                    ->danger()
-                                    ->send();
-                                return;
-                            }
-
+                            // Registramos el nuevo detalle de rechazo
                             $userName = auth()->user()->name;
 
                             \App\Models\DerivationDetail::create([
@@ -427,16 +436,101 @@ class ReceivedDocumentResource extends Resource
                                 'status' => 'Rechazado'
                             ]);
 
-                            Notification::make()
+                            // Eliminamos el registro del cuaderno de cargos si existe
+                            $chargeBookEntry = \App\Models\ChargeBook::where('document_id', $record->id)
+                                ->where('department_id', $userDepartmentId)
+                                ->first();
+
+                            if ($chargeBookEntry) {
+                                $chargeBookEntry->delete();
+                            }                            Notification::make()
                                 ->title('Documento rechazado')
-                                ->body('El documento ha sido rechazado con éxito.')
+                                ->body('El documento ha sido rechazado con éxito. Si existía un registro en el cuaderno de cargos, ha sido eliminado.')
+                                ->success()
+                                ->send();
+                        }),
+                    Tables\Actions\Action::make('deriveDocument')
+                        ->label('Derivar documento')
+                        ->icon('heroicon-o-paper-airplane')
+                        ->color('primary')
+                        ->modalHeading('Derivar documento')
+                        ->modalWidth('lg')
+                        ->modalDescription('Seleccione el departamento al que desea derivar este documento.')                        ->form([                            
+                            Forms\Components\Select::make('destination_department_id')
+                                ->label('Departamento de destino')
+                                ->options(function () {
+                                    // Obtener todos los departamentos excepto el del usuario actual
+                                    $userDepartmentId = Auth::user()->employee->department_id ?? 0;
+                                    return \App\Models\Department::where('id', '!=', $userDepartmentId)
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                })
+                                ->required()
+                                ->searchable()
+                                ->preload()
+                                ->placeholder('Seleccione un departamento'),
+                            Forms\Components\Textarea::make('comments')
+                                ->label('Comentarios')
+                                ->placeholder('Agregue comentarios adicionales si es necesario')
+                                ->maxLength(255)
+                        ])
+                        ->visible(function (Document $record) {
+                            $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                            
+                            if (!$userDepartmentId) {
+                                return false;
+                            }
+                            
+                            // El botón debe ser visible si el documento está en el cuaderno de cargos del usuario
+                            $isInChargeBook = \App\Models\ChargeBook::where('document_id', $record->id)
+                                ->where('department_id', $userDepartmentId)
+                                ->exists();
+                                
+                            return $isInChargeBook;
+                        })
+                        ->action(function (Document $record, array $data) {
+                            $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                            
+                            if (!$userDepartmentId) {
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('No tienes un departamento asignado.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                            
+                            // Crear una nueva derivación
+                            $derivation = \App\Models\Derivation::create([
+                                'document_id' => $record->id,
+                                'origin_department_id' => $userDepartmentId,
+                                'destination_department_id' => $data['destination_department_id'],
+                                'derivated_by_user_id' => auth()->id(),
+                            ]);
+                            
+                            // Crear el detalle de la derivación (Enviado)
+                            $userName = auth()->user()->name;
+                            $comments = !empty($data['comments']) 
+                                ? "El usuario {$userName} derivó el documento con el comentario: " . $data['comments']
+                                : "El usuario {$userName} derivó el documento.";
+                                
+                            \App\Models\DerivationDetail::create([
+                                'derivation_id' => $derivation->id,
+                                'comments' => $comments,
+                                'user_id' => auth()->id(),
+                                'status' => 'Enviado'
+                            ]);
+                            
+                            Notification::make()
+                                ->title('Documento derivado')
+                                ->body('El documento ha sido derivado con éxito al departamento seleccionado.')
                                 ->success()
                                 ->send();
                         }),
                 ])->icon('heroicon-m-ellipsis-vertical'),
             ])
-            ->bulkActions([
-            ]);
+            ->bulkActions([]);
     }
 
     public static function getEloquentQuery(): Builder

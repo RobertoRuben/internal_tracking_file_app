@@ -197,12 +197,11 @@ class DerivationResource extends Resource
                                         ->relationship(
                                             'document',
                                             'doc_code',
-                                            fn(Builder $query) => $query
-                                                ->where('created_by_department_id', Auth::user()->employee->department_id ?? null)
                                         )
                                         ->getOptionLabelFromRecordUsing(fn($record) => "{$record->doc_code} - {$record->name}")
                                         ->dehydrated()
                                         ->searchable()
+                                        ->disabled()
                                         ->preload(),
                                 ]),
 

@@ -41,7 +41,7 @@ class Document extends Model
     {
         return $this->hasMany(ChargeBook::class);
     }
-
+    
     /**
      * Obtiene el estado de derivación del documento para un departamento específico
      * 
