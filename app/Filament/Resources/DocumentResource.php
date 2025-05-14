@@ -86,8 +86,8 @@ class DocumentResource extends Resource
                             ->disk('public')
                             ->directory('documentos')
                             ->acceptedFileTypes(['application/pdf'])
-                            ->maxSize(10240) 
-                            ->openable() 
+                            ->maxSize(10240)
+                            ->openable()
                             ->validationMessages([
                                 'required' => 'El archivo es obligatorio.',
                                 'max' => 'El archivo no debe exceder los 10MB.',
@@ -134,7 +134,8 @@ class DocumentResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->copyable()
-                    ->copyMessage('Código copiado al portapapeles'),
+                    ->copyMessage('Código copiado al portapapeles')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('registration_number')
                     ->label('N° de registro')
                     ->formatStateUsing(fn($state) => str_pad($state, 11, '0', STR_PAD_LEFT))
@@ -154,14 +155,6 @@ class DocumentResource extends Resource
                     ->label('Páginas')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('employee.full_name')
-                    ->label('Empleado remitente')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('creatorDepartment.name')
-                    ->label('Departamento origen')
-                    ->searchable()
-                    ->sortable(),
                 Tables\Columns\TextColumn::make('registeredBy.name')
                     ->label('Registrado por')
                     ->searchable()
@@ -169,7 +162,8 @@ class DocumentResource extends Resource
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Fecha de registro')
                     ->dateTime('d/m/Y H:i')
-                    ->sortable(),                Tables\Columns\IconColumn::make('is_derived')
+                    ->sortable(),
+                Tables\Columns\IconColumn::make('is_derived')
                     ->label('Derivado')
                     ->boolean()
                     ->trueIcon('heroicon-o-check-circle')
@@ -177,46 +171,6 @@ class DocumentResource extends Resource
                     ->trueColor('success')
                     ->falseColor('danger')
                     ->tooltip(fn(bool $state): string => $state ? 'Documento derivado' : 'Documento no derivado'),
-                Tables\Columns\BadgeColumn::make('document_relation')
-                    ->label('Relación')
-                    ->getStateUsing(function (Document $record) {
-                        $userDepartmentId = Auth::user()->employee->department_id ?? null;
-                        
-                        if (!$userDepartmentId) {
-                            return 'Sin departamento';
-                        }
-                        
-                        // Verificar si fue creado por el departamento del usuario
-                        if ($record->created_by_department_id === $userDepartmentId) {
-                            return 'creado';
-                        }
-                        
-                        // Verificar si fue derivado por el departamento del usuario
-                        $derivatedByUs = $record->derivations()
-                            ->where('origin_department_id', $userDepartmentId)
-                            ->exists();
-                            
-                        if ($derivatedByUs) {
-                            return 'derivado';
-                        }
-                        
-                        // Verificar si fue recibido por el departamento del usuario
-                        $receivedByUs = $record->derivations()
-                            ->where('destination_department_id', $userDepartmentId)
-                            ->exists();
-                            
-                        if ($receivedByUs) {
-                            return 'recibido';
-                        }
-                        
-                        return 'otro';
-                    })
-                    ->colors([
-                        'primary' => 'creado',
-                        'warning' => 'derivado',
-                        'success' => 'recibido',
-                        'danger' => 'otro',
-                    ]),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Fecha de registro')
                     ->dateTime('d/m/Y H:i')
@@ -230,18 +184,7 @@ class DocumentResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-->filters([
-                Tables\Filters\SelectFilter::make('employee_id')
-                    ->label('Empleado remitente')
-                    ->relationship('employee', 'names', fn(Builder $query) => $query->where('is_active', true))
-                    ->getOptionLabelFromRecordUsing(fn($record) => "{$record->names} {$record->paternal_surname} {$record->maternal_surname}")
-                    ->searchable()
-                    ->preload(),
-                Tables\Filters\SelectFilter::make('created_by_department_id')
-                    ->label('Departamento de origen')
-                    ->relationship('creatorDepartment', 'name')
-                    ->searchable()
-                    ->preload(),
+            ->filters([
                 Tables\Filters\SelectFilter::make('registered_by_user_id')
                     ->label('Registrado por')
                     ->relationship('registeredBy', 'name')
@@ -252,117 +195,118 @@ class DocumentResource extends Resource
                     ->placeholder('Todos')
                     ->trueLabel('Derivados')
                     ->falseLabel('No derivados'),
-                Tables\Filters\SelectFilter::make('document_relation')
-                    ->label('Relación con documento')
-                    ->options([
-                        'created' => 'Creados por mi departamento',
-                        'received' => 'Recibidos por mi departamento',
-                        'derived' => 'Derivados por mi departamento',
+                Tables\Filters\Filter::make('created_at')
+                    ->label('Fecha de creación')
+                    ->form([
+                        Forms\Components\DatePicker::make('desde')
+                            ->label('Desde')
+                            ->placeholder('Fecha inicial'),
+                        Forms\Components\DatePicker::make('hasta')
+                            ->label('Hasta')
+                            ->placeholder('Fecha final'),
                     ])
-                    ->query(function (Builder $query, array $data) {
-                        if (empty($data['value'])) {
-                            return $query;
-                        }
-                        
+                    ->query(function (Builder $query, array $data): Builder {
                         $userDepartmentId = Auth::user()->employee->department_id ?? null;
                         
                         if (!$userDepartmentId) {
                             return $query;
                         }
                         
-                        return match ($data['value']) {
-                            'created' => $query->where('created_by_department_id', $userDepartmentId),
-                            'received' => $query->whereHas('derivations', function (Builder $query) use ($userDepartmentId) {
-                                $query->where('destination_department_id', $userDepartmentId);
-                            }),
-                            'derived' => $query->whereHas('derivations', function (Builder $query) use ($userDepartmentId) {
-                                $query->where('origin_department_id', $userDepartmentId);
-                            }),
-                            default => $query,
-                        };
+                        $query->where('created_by_department_id', $userDepartmentId);
+                        
+                        return $query
+                            ->when(
+                                $data['desde'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['hasta'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
                     }),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),                Tables\Actions\Action::make('download')
-                    ->label('Ver documento')
-                    ->icon('heroicon-o-document-text')
-                    ->color('success')
-                    ->url(function (Document $record) {
-                        return asset('storage/' . $record->path);
-                    })
-                    ->openUrlInNewTab()
-                    ->visible(fn(Document $record) => $record->path && Storage::disk('public')->exists($record->path)),
-                Tables\Actions\Action::make('derivar')
-                    ->label('Derivar')
-                    ->icon('heroicon-o-arrow-right-circle')
-                    ->color('warning')
-                    ->form([
-                        Forms\Components\Select::make('destination_department_id')
-                            ->label('Departamento de destino')
-                            ->relationship('derivations.destinationDepartment', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->validationMessages([
-                                'required' => 'Debe seleccionar un departamento de destino.'
-                            ]),
-                        Forms\Components\Textarea::make('comments')
-                            ->label('Observaciones')
-                            ->placeholder('Ingrese alguna observación o comentario sobre esta derivación...')
-                            ->columnSpanFull(),
-                    ])
-                    ->action(function (Document $record, array $data) {
-                        // Crear la derivación
-                        $derivation = \App\Models\Derivation::create([
-                            'document_id' => $record->id,
-                            'origin_department_id' => Auth::user()->employee->department_id ?? null,
-                            'destination_department_id' => $data['destination_department_id'],
-                            'derivated_by_user_id' => Auth::id(),
-                            'status' => 'Enviado',
-                        ]);
-                        
-                        // Guardar comentarios si existen
-                        if (isset($data['comments']) && !empty($data['comments'])) {
-                            \App\Models\DerivationDetail::create([
-                                'derivation_id' => $derivation->id,
-                                'comments' => $data['comments'] ?? 'Documento derivado',
-                                'user_id' => Auth::id(),
-                                'status' => 'Enviado'
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver'),
+                    Tables\Actions\EditAction::make()
+                        ->label('Editar'),
+                    Tables\Actions\Action::make('download')
+                        ->label('Ver documento')
+                        ->icon('heroicon-o-document-text')
+                        ->color('success')
+                        ->url(function (Document $record) {
+                            return asset('storage/' . $record->path);
+                        })
+                        ->openUrlInNewTab()
+                        ->visible(fn(Document $record) => $record->path && Storage::disk('public')->exists($record->path)),
+                    Tables\Actions\Action::make('derivar')
+                        ->label('Derivar')
+                        ->icon('heroicon-o-arrow-right-circle')
+                        ->color('warning')
+                        ->visible(fn (Document $record) => $record->is_derived === false)
+                        ->form([
+                            Forms\Components\Select::make('destination_department_id')
+                                ->label('Departamento de destino')
+                                ->relationship('derivations.destinationDepartment', 'name')
+                                ->searchable()
+                                ->preload()
+                                ->required()
+                                ->validationMessages([
+                                    'required' => 'Debe seleccionar un departamento de destino.'
+                                ]),
+                            Forms\Components\Textarea::make('comments')
+                                ->label('Observaciones')
+                                ->placeholder('Ingrese alguna observación o comentario sobre esta derivación...')
+                                ->columnSpanFull(),
+                        ])
+                        ->action(function (Document $record, array $data) {
+                            $derivation = \App\Models\Derivation::create([
+                                'document_id' => $record->id,
+                                'origin_department_id' => Auth::user()->employee->department_id ?? null,
+                                'destination_department_id' => $data['destination_department_id'],
+                                'derivated_by_user_id' => Auth::id(),
+                                'status' => 'Enviado',
                             ]);
-                        }
-                        
-                        // Actualizar el documento como derivado
-                        $record->update(['is_derived' => true]);
-                        
-                        Notification::make()
-                            ->success()
-                            ->title('Documento derivado')
-                            ->body('El documento ha sido derivado correctamente.')
-                            ->send();
-                    }),
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar')
-                    ->requiresConfirmation()
-                    ->modalHeading('Eliminar documento')
-                    ->modalDescription('¿Está seguro que desea eliminar este documento? Esta acción no se puede deshacer y también eliminará el archivo físico asociado.')
-                    ->modalSubmitActionLabel('Sí, eliminar')
-                    ->modalCancelActionLabel('No, cancelar')->successNotification(
-                        Notification::make()
-                            ->success()
-                            ->title('Documento eliminado')
-                            ->body('El documento y su archivo físico han sido eliminados correctamente.')
-                    ),
+
+                            if (isset($data['comments']) && !empty($data['comments'])) {
+                                \App\Models\DerivationDetail::create([
+                                    'derivation_id' => $derivation->id,
+                                    'comments' => $data['comments'] ?? 'Documento derivado',
+                                    'user_id' => Auth::id(),
+                                    'status' => 'Enviado'
+                                ]);
+                            }
+
+                            $record->update(['is_derived' => true]);
+
+                            Notification::make()
+                                ->success()
+                                ->title('Documento derivado')
+                                ->body('El documento ha sido derivado correctamente.')
+                                ->send();
+                        }),
+                    Tables\Actions\DeleteAction::make()
+                        ->label('Eliminar')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar documento')
+                        ->modalDescription('¿Está seguro que desea eliminar este documento? Esta acción no se puede deshacer y también eliminará el archivo físico asociado.')
+                        ->modalSubmitActionLabel('Sí, eliminar')
+                        ->modalCancelActionLabel('No, cancelar')->successNotification(
+                            Notification::make()
+                                ->success()
+                                ->title('Documento eliminado')
+                                ->body('El documento y su archivo físico han sido eliminados correctamente.')
+                        ),
+                ])->tooltip('Acciones')->icon('heroicon-m-ellipsis-vertical'),
             ])
-->bulkActions([
-                Tables\Actions\BulkActionGroup::make([                    Tables\Actions\BulkAction::make('downloadMultiple')
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('downloadMultiple')
                         ->label('Descargar seleccionados')
                         ->icon('heroicon-o-arrow-down-tray')
                         ->color('success')
                         ->action(function (\Illuminate\Support\Collection $records) {
-                            // Verificar que todos los archivos existen antes de iniciar la descarga
                             $validRecords = $records->filter(function ($record) {
                                 return $record->path && Storage::disk('public')->exists($record->path);
                             });
@@ -373,13 +317,12 @@ class DocumentResource extends Resource
                                     ->danger()
                                     ->send();
                                 return;
-                            } 
-                            
-                            // Si es solo un documento, descargarlo directamente
+                            }
+
                             if ($validRecords->count() === 1) {
                                 $document = $validRecords->first();
                                 $filePath = storage_path('app/public/' . $document->path);
-                                
+
                                 if (file_exists($filePath)) {
                                     $filename = 'Documento_' . $document->registration_number . '_' . $document->name . '.pdf';
                                     return response()->download($filePath, $filename, [
@@ -394,12 +337,10 @@ class DocumentResource extends Resource
                                     return;
                                 }
                             }
-                            
-                            // Para múltiples documentos, crear un archivo ZIP
+
                             $zipFileName = 'documentos_' . date('Y-m-d_H-i-s') . '.zip';
                             $zipFilePath = storage_path('app/temp/' . $zipFileName);
 
-                            // Asegurar que exista el directorio temporal
                             if (!file_exists(storage_path('app/temp'))) {
                                 mkdir(storage_path('app/temp'), 0755, true);
                             }
@@ -414,7 +355,6 @@ class DocumentResource extends Resource
                                 return;
                             }
 
-                            // Añadir cada documento al ZIP
                             foreach ($validRecords as $document) {
                                 $filePath = storage_path('app/public/' . $document->path);
                                 $relativeName = 'Documento_' . $document->registration_number . '_' . $document->name . '.pdf';
@@ -426,7 +366,6 @@ class DocumentResource extends Resource
 
                             $zip->close();
 
-                            // Devolver el archivo ZIP para descarga
                             return response()->download($zipFilePath, $zipFileName, [
                                 'Content-Type' => 'application/zip',
                             ])->deleteFileAfterSend(true);
@@ -452,7 +391,6 @@ class DocumentResource extends Resource
                         ])
                         ->action(function (\Illuminate\Support\Collection $records, array $data) {
                             $records->each(function ($record) use ($data) {
-                                // Crear la derivación
                                 $derivation = \App\Models\Derivation::create([
                                     'document_id' => $record->id,
                                     'origin_department_id' => Auth::user()->employee->department_id ?? null,
@@ -460,8 +398,7 @@ class DocumentResource extends Resource
                                     'derivated_by_user_id' => Auth::id(),
                                     'status' => 'Enviado',
                                 ]);
-                                
-                                // Guardar comentarios si existen
+
                                 if (isset($data['comments']) && !empty($data['comments'])) {
                                     \App\Models\DerivationDetail::create([
                                         'derivation_id' => $derivation->id,
@@ -470,11 +407,10 @@ class DocumentResource extends Resource
                                         'status' => 'Enviado'
                                     ]);
                                 }
-                                
-                                // Actualizar el documento como derivado
+
                                 $record->update(['is_derived' => true]);
                             });
-                            
+
                             Notification::make()
                                 ->success()
                                 ->title('Documentos derivados')
@@ -511,19 +447,17 @@ class DocumentResource extends Resource
             'view' => Pages\ViewDocument::route('/{record}'),
         ];
     }
-    
+
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
-        
-        // Obtener el departamento del usuario actual
+
         $userDepartmentId = Auth::user()->employee->department_id ?? null;
-        
+
         if ($userDepartmentId) {
-            // Filtrar por documentos creados por el departamento del usuario actual
             $query->where('created_by_department_id', $userDepartmentId);
         }
-        
+
         return $query;
     }
 }
