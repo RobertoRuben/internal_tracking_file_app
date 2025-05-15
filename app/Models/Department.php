@@ -4,8 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Rupadana\ApiService\Contracts\{HasAllowedFields, HasAllowedFilters, HasAllowedSorts};
 
-class Department extends Model
+class Department extends Model implements HasAllowedFields, HasAllowedFilters, HasAllowedSorts
 {
     protected $table = 'departments';
     protected $fillable = ['name'];
@@ -28,5 +29,42 @@ class Department extends Model
     public function destinationDerivations(): HasMany
     {
         return $this->hasMany(Derivation::class, 'destination_department_id');
+    }
+
+    /**
+     * Define los campos permitidos para seleccionar desde la API
+     */
+    public static function getAllowedFields(): array
+    {
+        return [
+            'id',
+            'name',
+            'created_at',
+            'updated_at',
+        ];
+    }
+
+    /**
+     * Define los campos permitidos para ordenar resultados desde la API
+     */
+    public static function getAllowedSorts(): array
+    {
+        return [
+            'id',
+            'name',
+            'created_at',
+            'updated_at',
+        ];
+    }
+
+    /**
+     * Define los campos permitidos para filtrar resultados desde la API
+     */
+    public static function getAllowedFilters(): array
+    {
+        return [
+            'id',
+            'name',
+        ];
     }
 }

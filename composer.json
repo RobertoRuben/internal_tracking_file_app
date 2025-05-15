@@ -13,7 +13,8 @@
         "laravel/framework": "^10.0",
         "laravel/sanctum": "^3.2",
         "laravel/tinker": "^2.8",
-        "livewire/livewire": "^3.6"
+        "livewire/livewire": "^3.6",
+        "rupadana/filament-api-service": "^3.4"
     },
     "require-dev": {
         "fakerphp/faker": "^1.9.1",

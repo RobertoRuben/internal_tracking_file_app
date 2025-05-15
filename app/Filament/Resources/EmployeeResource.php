@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Collection;
 use App\Filament\Resources\EmployeeResource\RelationManagers\UserRelationManager;
+use App\Filament\Resources\EmployeeResource\Api\Transformers\EmployeeTransformer;
 
 class EmployeeResource extends Resource
 {
@@ -291,5 +292,10 @@ class EmployeeResource extends Resource
             'index' => Pages\ManageEmployees::route('/'),
             'view' => Pages\ViewEmployee::route('/{record}'),
         ];
+    }
+
+    public static function getApiTransformer()
+    {
+        return EmployeeTransformer::class;
     }
 }

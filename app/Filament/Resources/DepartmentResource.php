@@ -11,6 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\DepartmentResource\Api\Transformers\DepartmentTransformer;
 
 class DepartmentResource extends Resource
 {
@@ -123,5 +124,10 @@ class DepartmentResource extends Resource
             'index' => Pages\ManageDepartments::route('/'),
             'view' => Pages\ViewDepartment::route('/{record}'),
         ];
+    }
+
+    public static function getApiTransformer()
+    {
+        return DepartmentTransformer::class;
     }
 }

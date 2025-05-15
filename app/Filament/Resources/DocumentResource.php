@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Notifications\Notification;
 use Filament\Notifications\Actions\Action as NotificationAction;
 use App\Filament\Resources\DocumentResource\RelationManagers\DerivationsRelationManager;
+use App\Filament\Resources\DocumentResource\Api\Transformers\DocumentTransformer;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
@@ -481,5 +482,10 @@ class DocumentResource extends Resource
         }
 
         return $query;
+    }
+
+    public static function getApiTransformer()
+    {
+        return DocumentTransformer::class;
     }
 }

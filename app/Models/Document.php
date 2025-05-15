@@ -7,8 +7,9 @@ use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Rupadana\ApiService\Contracts\{HasAllowedFields, HasAllowedFilters, HasAllowedSorts};
 
-class Document extends Model
+class Document extends Model implements HasAllowedFields, HasAllowedFilters, HasAllowedSorts
 {
     protected $table = 'documents';
     protected $fillable = [
@@ -109,5 +110,65 @@ class Document extends Model
                 Storage::disk('public')->delete($doc->path);
             }
         });
+    }
+
+    /**
+     * Define los campos permitidos para seleccionar desde la API
+     */
+    public static function getAllowedFields(): array
+    {
+        return [
+            'id',
+            'registration_number',
+            'doc_code',
+            'name',
+            'subject',
+            'date',
+            'reference_number',
+            'document_type',
+            'origin',
+            'priority',
+            'status',
+            'is_confidential',
+            'registered_by_user_id',
+            'created_by_department_id',
+            'created_at',
+            'updated_at',
+        ];
+    }
+
+    /**
+     * Define los campos permitidos para ordenar resultados desde la API
+     */
+    public static function getAllowedSorts(): array
+    {
+        return [
+            'id',
+            'registration_number',
+            'date',
+            'priority',
+            'status',
+            'created_at',
+            'updated_at',
+        ];
+    }
+
+    /**
+     * Define los campos permitidos para filtrar resultados desde la API
+     */
+    public static function getAllowedFilters(): array
+    {
+        return [
+            'registration_number',
+            'doc_code',
+            'subject',
+            'document_type',
+            'origin',
+            'priority',
+            'status',
+            'is_confidential',
+            'created_by_department_id',
+            'date',
+        ];
     }
 }

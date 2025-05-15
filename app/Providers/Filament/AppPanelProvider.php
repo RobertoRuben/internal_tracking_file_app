@@ -20,6 +20,7 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Filament\Pages\UserProfile;
 use App\Filament\Widgets\DocumentsOverview;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Rupadana\ApiService\ApiServicePlugin;
 
 class AppPanelProvider extends PanelProvider
 {
@@ -56,6 +57,7 @@ class AppPanelProvider extends PanelProvider
             ])
             ->plugins([
                 FilamentShieldPlugin::make(),
+                ApiServicePlugin::make(),
             ])
             ->authMiddleware([
                 Authenticate::class,
