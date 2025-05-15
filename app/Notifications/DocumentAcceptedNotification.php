@@ -28,7 +28,7 @@ class DocumentAcceptedNotification extends Notification implements ShouldQueue
         return FilamentNotification::make()
             ->title('Documento aceptado')
             ->icon('heroicon-o-check-circle')
-            ->iconColor('success')            ->body("El documento {$this->document->name} ha sido aceptado por {$this->derivation->derivatedBy->name}")
+            ->iconColor('success')->body("El documento {$this->document->name} ha sido aceptado por {$this->derivation->derivatedBy->name}")
             ->actions([
                 \Filament\Notifications\Actions\Action::make('view')
                     ->label('Ver documento')

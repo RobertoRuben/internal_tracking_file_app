@@ -28,7 +28,7 @@ class DocumentRejectedNotification extends Notification implements ShouldQueue
         return FilamentNotification::make()
             ->title('Documento rechazado')
             ->icon('heroicon-o-x-circle')
-            ->iconColor('danger')            ->body("El documento {$this->document->name} ha sido rechazado por {$this->derivation->derivatedBy->name}")
+            ->iconColor('danger')->body("El documento {$this->document->name} ha sido rechazado por {$this->derivation->derivatedBy->name}")
             ->actions([
                 \Filament\Notifications\Actions\Action::make('view')
                     ->label('Ver documento')

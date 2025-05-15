@@ -28,11 +28,11 @@ class DocumentDerivedNotification extends Notification implements ShouldQueue
         return FilamentNotification::make()
             ->title('Nuevo documento derivado')
             ->icon('heroicon-o-document-arrow-down')
-            ->iconColor('warning')            ->body("Se te ha derivado el documento: {$this->document->name}")
+            ->iconColor('warning')->body("Se te ha derivado el documento: {$this->document->name}")
             ->actions([
                 \Filament\Notifications\Actions\Action::make('view')
-                    ->label('Ver documento')
-                    ->url(route('filament.app.resources.documents.view', $this->document))
+                    ->label('Ver Inbox')
+                    ->url(route('filament.app.resources.received-documents.index', $this->document))
                     ->button()
                     ->markAsRead(),
             ])
