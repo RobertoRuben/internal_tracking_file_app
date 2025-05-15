@@ -279,6 +279,15 @@ class DocumentResource extends Resource
 
                             $record->update(['is_derived' => true]);
 
+                            // Enviar notificación al departamento de destino
+                            $destinationUsers = \App\Models\User::whereHas('employee', function ($query) use ($data) {
+                                $query->where('department_id', $data['destination_department_id']);
+                            })->get();
+
+                            foreach ($destinationUsers as $destinationUser) {
+                                $destinationUser->notify(new \App\Notifications\DocumentDerivedNotification($derivation, $record));
+                            }
+
                             Notification::make()
                                 ->success()
                                 ->title('Documento derivado')
@@ -413,6 +422,15 @@ class DocumentResource extends Resource
                                 ]);
 
                                 $record->update(['is_derived' => true]);
+                                
+                                // Enviar notificación al departamento de destino
+                                $destinationUsers = \App\Models\User::whereHas('employee', function ($query) use ($data) {
+                                    $query->where('department_id', $data['destination_department_id']);
+                                })->get();
+    
+                                foreach ($destinationUsers as $destinationUser) {
+                                    $destinationUser->notify(new \App\Notifications\DocumentDerivedNotification($derivation, $record));
+                                }
                             });
 
                             Notification::make()

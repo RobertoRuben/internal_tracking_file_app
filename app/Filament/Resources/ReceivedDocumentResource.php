@@ -364,6 +364,12 @@ class ReceivedDocumentResource extends Resource
                                 'notes' => "Documento recibido automáticamente desde el sistema de derivaciones"
                             ]);
 
+                            // Enviar notificación al remitente del documento
+                            $senderUser = \App\Models\User::find($derivation->derivated_by_user_id);
+                            if ($senderUser) {
+                                $senderUser->notify(new \App\Notifications\DocumentAcceptedNotification($derivation, $record));
+                            }
+
                             Notification::make()
                                 ->title('Éxito')
                                 ->body('El documento ha sido recibido y registrado en tu cuaderno de cargos.')
@@ -444,7 +450,15 @@ class ReceivedDocumentResource extends Resource
 
                             if ($chargeBookEntry) {
                                 $chargeBookEntry->delete();
-                            }                            Notification::make()
+                            }
+                            
+                            // Enviar notificación al remitente del documento
+                            $senderUser = \App\Models\User::find($derivation->derivated_by_user_id);
+                            if ($senderUser) {
+                                $senderUser->notify(new \App\Notifications\DocumentRejectedNotification($derivation, $record));
+                            }
+                            
+                            Notification::make()
                                 ->title('Documento rechazado')
                                 ->body('El documento ha sido rechazado con éxito. Si existía un registro en el cuaderno de cargos, ha sido eliminado.')
                                 ->success()
