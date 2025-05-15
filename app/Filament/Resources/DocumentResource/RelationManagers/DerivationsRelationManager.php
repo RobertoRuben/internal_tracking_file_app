@@ -56,10 +56,17 @@ class DerivationsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
+                    ->state(function (\App\Models\Derivation $record): string {
+                        // Obtener el último detalle de la derivación
+                        $lastDetail = $record->details()->latest()->first();
+                        // Devolver el estado del último detalle o el estado predeterminado de la derivación si no hay detalles
+                        return $lastDetail ? $lastDetail->status : $record->status;
+                    })
                     ->color(fn (string $state): string => match ($state) {
                         'Pendiente' => 'warning',
                         'Recibido' => 'success',
                         'Rechazado' => 'danger',
+                        'Enviado' => 'info',
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('derivatedBy.name')
@@ -95,9 +102,7 @@ class DerivationsRelationManager extends RelationManager
                     ])),                Tables\Actions\EditAction::make()
                     ->label('Editar')
                     ->visible(function (\App\Models\Derivation $record) {
-                        // Obtener el último detalle de la derivación
                         $lastDetail = $record->details()->latest()->first();
-                        // Mostrar el botón solo si no hay detalles o el último detalle tiene estado "Enviado"
                         return !$lastDetail || $lastDetail->status === 'Enviado';
                     }),
                 Tables\Actions\DeleteAction::make()
