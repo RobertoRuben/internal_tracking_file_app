@@ -16,7 +16,8 @@ class ManageEmployees extends ManageRecords
     {
         return [
             Actions\CreateAction::make()
-                ->label('Crear empleado'),
+                ->label('Crear empleado')
+                ->icon('heroicon-o-plus-circle'),
         ];
     }
 

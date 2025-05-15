@@ -19,14 +19,8 @@ class Document extends Model
         'path',
         'registered_by_user_id',
         'is_derived',
-        'employee_id',
         'created_by_department_id'
     ];
-
-    public function employee(): BelongsTo
-    {
-        return $this->belongsTo(Employee::class);
-    }
 
     public function creatorDepartment(): BelongsTo
     {
@@ -42,30 +36,48 @@ class Document extends Model
     {
         return $this->hasMany(Derivation::class);
     }
+    
+    public function chargeBooks(): HasMany
+    {
+        return $this->hasMany(ChargeBook::class);
+    }
+    
+    /**
+     * Obtiene el estado de derivación del documento para un departamento específico
+     * 
+     * @param int $departmentId ID del departamento a verificar
+     * @return string|null Estado de la derivación ('Enviado', 'Recibido', 'Rechazado') o null si no existe
+     */
+    public function getDerivationStatusForDepartment(int $departmentId): ?string
+    {
+        // Obtener la última derivación dirigida a este departamento
+        $derivation = $this->derivations()
+            ->where('destination_department_id', $departmentId)
+            ->latest()
+            ->first();
+            
+        return $derivation ? $derivation->status : null;
+    }
 
     protected static function booted(): void
     {
         static::creating(function (Document $doc) {
-            // Asegurar que siempre se registre el usuario autenticado 
             if (empty($doc->registered_by_user_id) && Auth::check()) {
                 $doc->registered_by_user_id = Auth::id();
             }
             
-            // Asegurar que siempre se registre el departamento del usuario
             if (empty($doc->created_by_department_id) && Auth::check()) {
                 $doc->created_by_department_id = Auth::user()->employee->department_id ?? null;
             }
             
-            // Generar el número de registro basado en el departamento
+
             if (empty($doc->registration_number)) {
                 $departmentId = $doc->created_by_department_id;
                 
-                // Obtener el último número de registro para este departamento
                 $lastDocumentInDepartment = self::where('created_by_department_id', $departmentId)
                     ->orderBy('registration_number', 'desc')
                     ->first();
                 
-                // Si no hay documentos previos, comenzar desde 1, de lo contrario incrementar el último
                 $newRegistrationNumber = $lastDocumentInDepartment 
                     ? $lastDocumentInDepartment->registration_number + 1 
                     : 1;
@@ -73,10 +85,20 @@ class Document extends Model
                 $doc->registration_number = $newRegistrationNumber;
             }
             
-            // Generar el código del documento
             if (empty($doc->doc_code)) {
                 $timestamp = now()->format('dmYHi');
-                $seq = str_pad($doc->registration_number, 11, '0', STR_PAD_LEFT);
+                
+                $lastDocument = self::orderBy('id', 'desc')->first();
+                
+                $lastSeqNumber = 0;
+                if ($lastDocument && !empty($lastDocument->doc_code)) {
+                    $lastSeqNumber = (int) substr($lastDocument->doc_code, -11);
+                }
+                
+                $nextSeqNumber = $lastSeqNumber + 1;
+                
+                $seq = str_pad($nextSeqNumber, 11, '0', STR_PAD_LEFT);
+                
                 $doc->doc_code = "DOC{$timestamp}{$seq}";
             }
         });

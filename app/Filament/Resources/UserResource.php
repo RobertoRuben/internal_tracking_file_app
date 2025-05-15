@@ -14,6 +14,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Hash;
+use Filament\Notifications\Notification;
 
 class UserResource extends Resource
 {
@@ -75,8 +76,12 @@ class UserResource extends Resource
                             ->label('Contraseña')
                             ->password()
                             ->required()
-                            ->dehydrateStateUsing(fn(string $state): string => Hash::make($state))
-                            ->dehydrated(fn(?string $state): bool => filled($state))
+                            ->dehydrateStateUsing(function (string $state) {
+                                return Hash::make($state);
+                            })
+                            ->dehydrated(function (?string $state) {
+                                return filled($state);
+                            })
                             ->placeholder('Ingrese una contraseña segura')
                             ->minLength(8)
                             ->regex('/^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/')
@@ -98,9 +103,14 @@ class UserResource extends Resource
                             ->label('Empleado')
                             ->relationship(
                                 'employee',
-                                fn($query) => $query->where('is_active', true)
+                                'names',
+                                function ($query) {
+                                    return $query->where('is_active', true);
+                                }
                             )
-                            ->getOptionLabelFromRecordUsing(fn(Employee $record) => "{$record->names} {$record->paternal_surname} {$record->maternal_surname}")
+                            ->getOptionLabelFromRecordUsing(function (Employee $record) {
+                                return "{$record->names} {$record->paternal_surname} {$record->maternal_surname}";
+                            })
                             ->searchable(['names', 'paternal_surname', 'maternal_surname'])
                             ->placeholder('Seleccione un empleado')
                             ->preload()
@@ -135,10 +145,9 @@ class UserResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('employee.names')
                     ->label('Nombre del empleado')
-                    ->formatStateUsing(
-                        fn($record) =>
-                        $record->employee ? "{$record->employee->names} {$record->employee->paternal_surname} {$record->employee->maternal_surname}" : '-'
-                    )
+                    ->formatStateUsing(function ($record) {
+                        return $record->employee ? "{$record->employee->names} {$record->employee->paternal_surname} {$record->employee->maternal_surname}" : '-';
+                    })
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
@@ -168,27 +177,71 @@ class UserResource extends Resource
                     ->query(function (Builder $query, array $data) {
                         return $query->when(
                             $data['value'] !== null,
-                            fn(Builder $query) => $query->where('is_active', $data['value'])
+                            function (Builder $query) use ($data) {
+                                return $query->where('is_active', $data['value']);
+                            }
                         );
                     }),
                 Tables\Filters\SelectFilter::make('employee_id')
                     ->label('Empleado')
-                    ->relationship('employee', 'names', fn(Builder $query) => $query->where('is_active', true))
+                    ->relationship('employee', 'names', function ($query) {
+                        return $query->where('is_active', true);
+                    })
                     ->searchable()
                     ->preload(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar')
-                    ->requiresConfirmation()
-                    ->modalHeading('Eliminar usuario')
-                    ->modalDescription('¿Está seguro que desea eliminar este usuario? Esta acción no se puede deshacer.')
-                    ->modalSubmitActionLabel('Sí, eliminar')
-                    ->modalCancelActionLabel('No, cancelar'),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver'),
+                    Tables\Actions\EditAction::make()
+                        ->label('Editar'),
+                    Tables\Actions\Action::make('enable')
+                        ->label('Habilitar')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Habilitar usuario')
+                        ->modalDescription('¿Está seguro que desea habilitar este usuario? El usuario podrá iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, habilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->visible(fn (User $record): bool => $record->is_active === false)
+                        ->action(function (User $record): void {
+                            $record->update(['is_active' => true]);
+                            
+                            Notification::make()
+                                ->title('Usuario habilitado')
+                                ->success()
+                                ->body('El usuario ha sido habilitado correctamente.')
+                                ->send();
+                        }),
+                    Tables\Actions\Action::make('disable')
+                        ->label('Deshabilitar')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Deshabilitar usuario')
+                        ->modalDescription('¿Está seguro que desea deshabilitar este usuario? El usuario no podrá iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, deshabilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->visible(fn (User $record): bool => $record->is_active === true)
+                        ->action(function (User $record): void {
+                            $record->update(['is_active' => false]);
+                            
+                            Notification::make()
+                                ->title('Usuario deshabilitado')
+                                ->success()
+                                ->body('El usuario ha sido deshabilitado correctamente.')
+                                ->send();
+                        }),
+                    Tables\Actions\DeleteAction::make()
+                        ->label('Eliminar')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar usuario')
+                        ->modalDescription('¿Está seguro que desea eliminar este usuario? Esta acción no se puede deshacer.')
+                        ->modalSubmitActionLabel('Sí, eliminar')
+                        ->modalCancelActionLabel('No, cancelar'),
+                ])->icon('heroicon-m-ellipsis-vertical'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -199,6 +252,56 @@ class UserResource extends Resource
                         ->modalDescription('¿Está seguro que desea eliminar los usuarios seleccionados? Esta acción no se puede deshacer.')
                         ->modalSubmitActionLabel('Sí, eliminar')
                         ->modalCancelActionLabel('No, cancelar'),
+                    Tables\Actions\BulkAction::make('enableMultiple')
+                        ->label('Habilitar seleccionados')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Habilitar usuarios seleccionados')
+                        ->modalDescription('¿Está seguro que desea habilitar los usuarios seleccionados? Todos podrán iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, habilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->action(function (\Illuminate\Support\Collection $records): void {
+                            $count = 0;
+                            
+                            foreach ($records as $record) {
+                                if ($record->is_active === false) {
+                                    $record->update(['is_active' => true]);
+                                    $count++;
+                                }
+                            }
+                            
+                            Notification::make()
+                                ->title('Usuarios habilitados')
+                                ->success()
+                                ->body("Se han habilitado {$count} usuarios correctamente.")
+                                ->send();
+                        }),
+                    Tables\Actions\BulkAction::make('disableMultiple')
+                        ->label('Deshabilitar seleccionados')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Deshabilitar usuarios seleccionados')
+                        ->modalDescription('¿Está seguro que desea deshabilitar los usuarios seleccionados? No podrán iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, deshabilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->action(function (\Illuminate\Support\Collection $records): void {
+                            $count = 0;
+                            
+                            foreach ($records as $record) {
+                                if ($record->is_active === true) {
+                                    $record->update(['is_active' => false]);
+                                    $count++;
+                                }
+                            }
+                            
+                            Notification::make()
+                                ->title('Usuarios deshabilitados')
+                                ->success()
+                                ->body("Se han deshabilitado {$count} usuarios correctamente.")
+                                ->send();
+                        }),
                 ]),
             ]);
     }

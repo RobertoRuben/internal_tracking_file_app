@@ -31,11 +31,6 @@ class Employee extends Model
         return $this->belongsTo(Department::class);
     }
 
-    public function documents(): HasMany
-    {
-        return $this->hasMany(Document::class);
-    }
-
     public function user(): HasOne
     {
         return $this->hasOne(User::class);

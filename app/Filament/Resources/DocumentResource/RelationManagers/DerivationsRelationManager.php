@@ -56,10 +56,17 @@ class DerivationsRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
+                    ->state(function (\App\Models\Derivation $record): string {
+                        // Obtener el último detalle de la derivación
+                        $lastDetail = $record->details()->latest()->first();
+                        // Devolver el estado del último detalle o el estado predeterminado de la derivación si no hay detalles
+                        return $lastDetail ? $lastDetail->status : $record->status;
+                    })
                     ->color(fn (string $state): string => match ($state) {
                         'Pendiente' => 'warning',
                         'Recibido' => 'success',
                         'Rechazado' => 'danger',
+                        'Enviado' => 'info',
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('derivatedBy.name')
@@ -79,10 +86,25 @@ class DerivationsRelationManager extends RelationManager
                     ->label('Crear derivación'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
+                Tables\Actions\Action::make('viewDetails')
+                    ->label('Ver detalles')
+                    ->icon('heroicon-o-eye')
+                    ->modalHeading(fn ($record) => "Detalles de la derivación #{$record->id}")
+                    ->modalWidth('xl')
+                    ->modalSubmitAction(false)
+                    ->modalContent(fn ($record) => view('filament.resources.derivation.details', [
+                        'derivation' => $record,
+                        'details' => $record->details()->with('user')->latest()->get(),
+                        'originDepartment' => $record->originDepartment->name,
+                        'destinationDepartment' => $record->destinationDepartment->name,
+                        'derivatedBy' => $record->derivatedBy->name,
+                        'created_at' => $record->created_at->format('d/m/Y H:i'),
+                    ])),                Tables\Actions\EditAction::make()
+                    ->label('Editar')
+                    ->visible(function (\App\Models\Derivation $record) {
+                        $lastDetail = $record->details()->latest()->first();
+                        return !$lastDetail || $lastDetail->status === 'Enviado';
+                    }),
                 Tables\Actions\DeleteAction::make()
                     ->label('Eliminar'),
             ])

@@ -13,7 +13,6 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Collection;
-use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\UserRelationManager;
 
 class EmployeeResource extends Resource
@@ -228,17 +227,19 @@ class EmployeeResource extends Resource
                     ->falseLabel('Inactivos'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->label('Ver'),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar')
-                    ->requiresConfirmation()
-                    ->modalHeading('Eliminar empleado')
-                    ->modalDescription('¿Está seguro que desea eliminar este empleado? Esta acción no se puede deshacer.')
-                    ->modalSubmitActionLabel('Sí, eliminar')
-                    ->modalCancelActionLabel('No, cancelar'),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make()
+                        ->label('Ver'),
+                    Tables\Actions\EditAction::make()
+                        ->label('Editar'),
+                    Tables\Actions\DeleteAction::make()
+                        ->label('Eliminar')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar empleado')
+                        ->modalDescription('¿Está seguro que desea eliminar este empleado? Esta acción no se puede deshacer.')
+                        ->modalSubmitActionLabel('Sí, eliminar')
+                        ->modalCancelActionLabel('No, cancelar'),
+                ])->icon('heroicon-m-ellipsis-vertical'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -280,7 +281,6 @@ class EmployeeResource extends Resource
     public static function getRelations(): array
     {
         return [
-            DocumentsRelationManager::class,
             UserRelationManager::class,
         ];
     }
