@@ -14,6 +14,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Hash;
+use Filament\Notifications\Notification;
 
 class UserResource extends Resource
 {
@@ -195,6 +196,44 @@ class UserResource extends Resource
                         ->label('Ver'),
                     Tables\Actions\EditAction::make()
                         ->label('Editar'),
+                    Tables\Actions\Action::make('enable')
+                        ->label('Habilitar')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Habilitar usuario')
+                        ->modalDescription('¿Está seguro que desea habilitar este usuario? El usuario podrá iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, habilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->visible(fn (User $record): bool => $record->is_active === false)
+                        ->action(function (User $record): void {
+                            $record->update(['is_active' => true]);
+                            
+                            Notification::make()
+                                ->title('Usuario habilitado')
+                                ->success()
+                                ->body('El usuario ha sido habilitado correctamente.')
+                                ->send();
+                        }),
+                    Tables\Actions\Action::make('disable')
+                        ->label('Deshabilitar')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Deshabilitar usuario')
+                        ->modalDescription('¿Está seguro que desea deshabilitar este usuario? El usuario no podrá iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, deshabilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->visible(fn (User $record): bool => $record->is_active === true)
+                        ->action(function (User $record): void {
+                            $record->update(['is_active' => false]);
+                            
+                            Notification::make()
+                                ->title('Usuario deshabilitado')
+                                ->success()
+                                ->body('El usuario ha sido deshabilitado correctamente.')
+                                ->send();
+                        }),
                     Tables\Actions\DeleteAction::make()
                         ->label('Eliminar')
                         ->requiresConfirmation()
@@ -213,6 +252,56 @@ class UserResource extends Resource
                         ->modalDescription('¿Está seguro que desea eliminar los usuarios seleccionados? Esta acción no se puede deshacer.')
                         ->modalSubmitActionLabel('Sí, eliminar')
                         ->modalCancelActionLabel('No, cancelar'),
+                    Tables\Actions\BulkAction::make('enableMultiple')
+                        ->label('Habilitar seleccionados')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Habilitar usuarios seleccionados')
+                        ->modalDescription('¿Está seguro que desea habilitar los usuarios seleccionados? Todos podrán iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, habilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->action(function (\Illuminate\Support\Collection $records): void {
+                            $count = 0;
+                            
+                            foreach ($records as $record) {
+                                if ($record->is_active === false) {
+                                    $record->update(['is_active' => true]);
+                                    $count++;
+                                }
+                            }
+                            
+                            Notification::make()
+                                ->title('Usuarios habilitados')
+                                ->success()
+                                ->body("Se han habilitado {$count} usuarios correctamente.")
+                                ->send();
+                        }),
+                    Tables\Actions\BulkAction::make('disableMultiple')
+                        ->label('Deshabilitar seleccionados')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Deshabilitar usuarios seleccionados')
+                        ->modalDescription('¿Está seguro que desea deshabilitar los usuarios seleccionados? No podrán iniciar sesión en el sistema.')
+                        ->modalSubmitActionLabel('Sí, deshabilitar')
+                        ->modalCancelActionLabel('No, cancelar')
+                        ->action(function (\Illuminate\Support\Collection $records): void {
+                            $count = 0;
+                            
+                            foreach ($records as $record) {
+                                if ($record->is_active === true) {
+                                    $record->update(['is_active' => false]);
+                                    $count++;
+                                }
+                            }
+                            
+                            Notification::make()
+                                ->title('Usuarios deshabilitados')
+                                ->success()
+                                ->body("Se han deshabilitado {$count} usuarios correctamente.")
+                                ->send();
+                        }),
                 ]),
             ]);
     }
