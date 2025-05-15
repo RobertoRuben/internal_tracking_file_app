@@ -33,6 +33,10 @@ class DerivationsRelationManager extends RelationManager
                     ->searchable()
                     ->preload()
                     ->placeholder('Seleccione un departamento'),
+                Forms\Components\TextInput::make('status')
+                    ->label('Estado')
+                    ->default('Pendiente')
+                    ->required(),
                 Forms\Components\Hidden::make('derivated_by_user_id')
                     ->default(fn () => auth()->id())
                     ->required(),
@@ -49,6 +53,15 @@ class DerivationsRelationManager extends RelationManager
                     ->label('Departamento de destino')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('status')
+                    ->label('Estado')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'Pendiente' => 'warning',
+                        'Recibido' => 'success',
+                        'Rechazado' => 'danger',
+                        default => 'gray',
+                    }),
                 Tables\Columns\TextColumn::make('derivatedBy.name')
                     ->label('Derivado por')
                     ->searchable(),
@@ -79,9 +92,14 @@ class DerivationsRelationManager extends RelationManager
                         'destinationDepartment' => $record->destinationDepartment->name,
                         'derivatedBy' => $record->derivatedBy->name,
                         'created_at' => $record->created_at->format('d/m/Y H:i'),
-                    ])),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
+                    ])),                Tables\Actions\EditAction::make()
+                    ->label('Editar')
+                    ->visible(function (\App\Models\Derivation $record) {
+                        // Obtener el último detalle de la derivación
+                        $lastDetail = $record->details()->latest()->first();
+                        // Mostrar el botón solo si no hay detalles o el último detalle tiene estado "Enviado"
+                        return !$lastDetail || $lastDetail->status === 'Enviado';
+                    }),
                 Tables\Actions\DeleteAction::make()
                     ->label('Eliminar'),
             ])

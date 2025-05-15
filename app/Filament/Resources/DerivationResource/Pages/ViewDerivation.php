@@ -22,12 +22,14 @@ class ViewDerivation extends ViewRecord
             ->schema([
                 Components\Section::make('Información del documento')
                     ->icon('heroicon-o-document-text')
-                    ->description('Detalles del documento derivado')->schema([
-                        Components\TextEntry::make('document.doc_code')
-                            ->label('Código del documento'),
+                    ->description('Detalles del documento derivado')
+                    ->schema([
                         Components\TextEntry::make('document.name')
                             ->label('Nombre del documento')
                             ->copyable(),
+                        Components\TextEntry::make('document.registration_number')
+                            ->label('Número de registro')
+                            ->formatStateUsing(fn($state) => str_pad($state, 11, '0', STR_PAD_LEFT)),
                         Components\TextEntry::make('document.subject')
                             ->label('Asunto')
                             ->columnSpanFull(),
@@ -44,6 +46,17 @@ class ViewDerivation extends ViewRecord
                             ->label('Departamento de destino'),
                         Components\TextEntry::make('derivatedBy.name')
                             ->label('Derivado por'),
+                        Components\TextEntry::make('status')
+                            ->label('Estado')
+                            ->badge()
+                            ->color(function ($state) {
+                                return match ($state) {
+                                    'Pendiente' => 'warning',
+                                    'Recibido' => 'success',
+                                    'Rechazado' => 'danger',
+                                    default => 'gray',
+                                };
+                            }),
                         Components\TextEntry::make('created_at')
                             ->label('Fecha de derivación')
                             ->dateTime('d/m/Y H:i')
@@ -57,7 +70,7 @@ class ViewDerivation extends ViewRecord
                 Components\Section::make('Historial de observaciones')
                     ->icon('heroicon-o-chat-bubble-left-right')
                     ->description('Comentarios sobre la derivación')
-                    ->visible(fn($record) => $record->details()->exists())
+                    ->visible(fn ($record) => $record->details()->exists())
                     ->schema([
                         Components\RepeatableEntry::make('details')
                             ->label(false)
@@ -65,6 +78,15 @@ class ViewDerivation extends ViewRecord
                                 Components\TextEntry::make('created_at')
                                     ->label('Fecha')
                                     ->dateTime('d/m/Y H:i'),
+                                Components\TextEntry::make('status')
+                                    ->label('Estado')
+                                    ->badge()
+                                    ->color(fn($state) => match($state) {
+                                        'Pendiente' => 'warning',
+                                        'Recibido' => 'success',
+                                        'Rechazado' => 'danger',
+                                        default => 'gray',
+                                    }),
                                 Components\TextEntry::make('user.name')
                                     ->label('Usuario'),
                                 Components\TextEntry::make('comments')
@@ -75,16 +97,53 @@ class ViewDerivation extends ViewRecord
                             ->columns(3),
                     ]),
             ]);
-    }
-    protected function getHeaderActions(): array
+    }    protected function getHeaderActions(): array
     {
         return [
             Actions\EditAction::make()
                 ->label('Editar')
-                ->modalHeading('Editar derivación')
-                ->mutateFormDataUsing(function (array $data): array {
-                    $data['comments'] = '';
-                    return $data;
+                ->visible(function () {
+                    $record = $this->getRecord();
+                    // Obtener el último detalle de la derivación
+                    $lastDetail = $record->details()->latest()->first();
+                    // Mostrar el botón solo si no hay detalles o el último detalle tiene estado "Enviado"
+                    return !$lastDetail || $lastDetail->status === 'Enviado';
+                }),
+            Actions\Action::make('changeStatus')
+                ->label('Cambiar estado')
+                ->icon('heroicon-o-check-badge')
+                ->color('warning')
+                ->form([
+                    Forms\Components\Select::make('status')
+                        ->label('Nuevo estado')
+                        ->options([
+                            'Pendiente' => 'Pendiente',
+                            'Recibido' => 'Recibido',
+                            'Rechazado' => 'Rechazado',
+                        ])
+                        ->required(),
+                    Forms\Components\Textarea::make('comments')
+                        ->label('Observaciones')
+                        ->placeholder('Ingrese alguna observación sobre este cambio de estado...'),
+                ])
+                ->action(function (array $data): void {
+                    // Actualizar el estado de la derivación
+                    $this->record->update(['status' => $data['status']]);
+                    
+                    // Guardar el comentario si se proporcionó
+                    if (isset($data['comments']) && !empty($data['comments'])) {
+                        $this->record->details()->create([
+                            'comments' => $data['comments'],
+                            'user_id' => Auth::id(),
+                            'status' => $data['status']
+                        ]);
+                    }
+    
+                    Notification::make()
+                        ->title('Estado actualizado')
+                        ->body("La derivación ha sido marcada como {$data['status']}.")
+                        ->success()
+                        ->send();
                 }),
         ];
     }

@@ -209,6 +209,12 @@ class DerivationResource extends Resource
                         ->modalSubmitActionLabel('Guardar cambios')
                         ->modalCancelActionLabel('Cancelar')
                         ->successNotificationTitle('Derivación actualizada')
+                        ->visible(function (Derivation $record) {
+                            // Obtener el último detalle de la derivación
+                            $lastDetail = $record->details()->latest()->first();
+                            // Mostrar el botón solo si no hay detalles o el último detalle tiene estado "Enviado"
+                            return !$lastDetail || $lastDetail->status === 'Enviado';
+                        })
                         ->form([
                             Forms\Components\Section::make('Información de la derivación')
                                 ->icon('heroicon-o-check-circle')

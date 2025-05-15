@@ -140,16 +140,15 @@ class ReceivedDocumentResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('updated_at')
-                    ->label('Fecha de actualización')
-                    ->dateTime('d/m/Y H:i')
+                    ->label('Fecha de actualización')                    ->dateTime('d/m/Y H:i')
                     ->timezone('America/Lima')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-            ])->filters([
+            ])
+            ->filters([
                 Tables\Filters\SelectFilter::make('derivation_status')
                     ->label('Estado')
                     ->options([
-                        'Enviado' => 'Enviado',
                         'Recibido' => 'Recibido',
                         'Rechazado' => 'Rechazado',
                     ])
@@ -166,6 +165,7 @@ class ReceivedDocumentResource extends Resource
 
                         $status = $data['value'];
 
+                        // Para Recibido o Rechazado, buscamos los que tengan detalles con ese estado específico
                         return $query->whereHas('derivations', function (Builder $derivationQuery) use ($status, $userDepartmentId) {
                             $derivationQuery->where('destination_department_id', $userDepartmentId)
                                 ->whereHas('details', function (Builder $detailsQuery) use ($status) {
@@ -183,26 +183,27 @@ class ReceivedDocumentResource extends Resource
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         $userDepartmentId = Auth::user()->employee->department_id ?? null;
+                        
+                        if (!$userDepartmentId) {
+                            return $query;
+                        }
 
-                        return $query
-                            ->when(
-                                $data['date_from'],
-                                fn(Builder $query, $date): Builder => $query->whereHas(
-                                    'derivations',
-                                    fn(Builder $query) => $query
-                                        ->where('destination_department_id', $userDepartmentId)
-                                        ->whereDate('created_at', '>=', $date)
-                                )
-                            )
-                            ->when(
-                                $data['date_until'],
-                                fn(Builder $query, $date): Builder => $query->whereHas(
-                                    'derivations',
-                                    fn(Builder $query) => $query
-                                        ->where('destination_department_id', $userDepartmentId)
-                                        ->whereDate('created_at', '<=', $date)
-                                )
-                            );
+                        // Solo aplicamos filtros si hay fechas especificadas
+                        if (!isset($data['date_from']) && !isset($data['date_until'])) {
+                            return $query;
+                        }
+
+                        return $query->whereHas('derivations', function (Builder $derivationQuery) use ($data, $userDepartmentId) {
+                            $derivationQuery->where('destination_department_id', $userDepartmentId);
+                            
+                            if (isset($data['date_from'])) {
+                                $derivationQuery->whereDate('created_at', '>=', $data['date_from']);
+                            }
+                            
+                            if (isset($data['date_until'])) {
+                                $derivationQuery->whereDate('created_at', '<=', $data['date_until']);
+                            }
+                        });
                     })
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
