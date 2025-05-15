@@ -19,6 +19,7 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Filament\Pages\UserProfile;
 use App\Filament\Widgets\DocumentsOverview;
+use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 
 class AppPanelProvider extends PanelProvider
 {
@@ -52,6 +53,9 @@ class AppPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+            ])
+            ->plugins([
+                FilamentShieldPlugin::make(),
             ])
             ->authMiddleware([
                 Authenticate::class,
