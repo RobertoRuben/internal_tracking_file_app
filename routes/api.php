@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\ChargeBookController;
 use App\Http\Controllers\Api\DerivationController;
+use App\Http\Controllers\Api\UserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,5 +43,10 @@ Route::prefix('v1')->group(function () {
         Route::get('derivations/all', [DerivationController::class, 'getAll']);
         Route::post('derivations/{id}/comments', [DerivationController::class, 'addComment']);
         Route::apiResource('derivations', DerivationController::class);
+        
+        Route::get('users/all', [UserController::class, 'getAll']);
+        Route::get('users/roles', [UserController::class, 'getRoles']);
+        Route::put('users/{id}/toggle-status', [UserController::class, 'toggleStatus']);
+        Route::apiResource('users', UserController::class);
     });
 });
