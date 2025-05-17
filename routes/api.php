@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\ChargeBookController;
+use App\Http\Controllers\Api\DerivationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -35,8 +36,11 @@ Route::prefix('v1')->group(function () {
         Route::get('documents/{id}/download', [DocumentController::class, 'downloadFile']);
         Route::apiResource('documents', DocumentController::class);
         
-        // Charge Book routes
         Route::get('charge-books/all', [ChargeBookController::class, 'getAll']);
         Route::apiResource('charge-books', ChargeBookController::class);
+        
+        Route::get('derivations/all', [DerivationController::class, 'getAll']);
+        Route::post('derivations/{id}/comments', [DerivationController::class, 'addComment']);
+        Route::apiResource('derivations', DerivationController::class);
     });
 });
