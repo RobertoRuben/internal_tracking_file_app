@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\DepartmentController;
+use App\Http\Controllers\Api\DocumentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,9 +22,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::prefix('v1')->group(function () {
-    Route::get('employees/all', [EmployeeController::class, 'getAll']);
-    Route::apiResource('employees', EmployeeController::class);
 
-    Route::get('departments/all', [DepartmentController::class, 'getAll']);
-    Route::apiResource('departments', DepartmentController::class);
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('employees/all', [EmployeeController::class, 'getAll']);
+        Route::apiResource('employees', EmployeeController::class);
+
+        Route::get('departments/all', [DepartmentController::class, 'getAll']);
+        Route::apiResource('departments', DepartmentController::class);
+
+        Route::get('documents/all', [DocumentController::class, 'getAll']);
+        Route::get('documents/{id}/download', [DocumentController::class, 'downloadFile']);
+        Route::apiResource('documents', DocumentController::class);
+    });
 });
