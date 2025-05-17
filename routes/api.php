@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DocumentController;
+use App\Http\Controllers\Api\ChargeBookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,5 +34,9 @@ Route::prefix('v1')->group(function () {
         Route::get('documents/all', [DocumentController::class, 'getAll']);
         Route::get('documents/{id}/download', [DocumentController::class, 'downloadFile']);
         Route::apiResource('documents', DocumentController::class);
+        
+        // Charge Book routes
+        Route::get('charge-books/all', [ChargeBookController::class, 'getAll']);
+        Route::apiResource('charge-books', ChargeBookController::class);
     });
 });
