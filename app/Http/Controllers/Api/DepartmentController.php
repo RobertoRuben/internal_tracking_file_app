@@ -14,6 +14,8 @@ class DepartmentController extends Controller
 {
     /**
      * Get paginated list of departments
+     * 
+     * This endpoint returns a paginated list of departments with optional filtering by name and includes employee count.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
@@ -21,23 +23,21 @@ class DepartmentController extends Controller
     public function index(Request $request)
     {
         $perPage = $request->query('per_page', 15);
-        
         $page = $request->query('page', 1);
-        
         $search = $request->query('search');
-        
+
         $query = Department::withCount('employees');
-        
+
         if ($search) {
             $query->where('name', 'LIKE', "%{$search}%");
         }
-        
+
         $sortBy = $request->query('sort_by', 'id');
         $sortDir = $request->query('sort_dir', 'desc');
         $query->orderBy($sortBy, $sortDir);
-        
+
         $departments = $query->paginate($perPage, ['*'], 'page', $page);
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Departments list retrieved successfully',
@@ -61,13 +61,15 @@ class DepartmentController extends Controller
 
     /**
      * Get all departments without pagination
+     * 
+     * This endpoint returns a complete list of all departments without pagination.
      *
      * @return \Illuminate\Http\Response
      */
     public function getAll()
     {
         $departments = Department::withCount('employees')->get();
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Complete list of departments retrieved successfully',
@@ -78,6 +80,8 @@ class DepartmentController extends Controller
 
     /**
      * Store a newly created department
+     * 
+     * This endpoint creates a new department with validated unique name.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
@@ -85,12 +89,12 @@ class DepartmentController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|unique:departments,name|string|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/',
+            'name' => 'required|unique:departments,name|string|max:255|regex:/^[\pL\s]+$/u',
         ], [
             'name.required' => 'The department name is required.',
             'name.unique' => 'This department name is already in use.',
             'name.max' => 'The department name must not exceed 255 characters.',
-            'name.regex' => 'The department name can only contain letters.'
+            'name.regex' => 'The department name can only contain letters and spaces.'
         ]);
 
         if ($validator->fails()) {
@@ -112,7 +116,7 @@ class DepartmentController extends Controller
 
     /**
      * Display the specified department
-     *
+     * 
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
@@ -136,7 +140,7 @@ class DepartmentController extends Controller
 
     /**
      * Update the specified department
-     *
+     * 
      * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
@@ -153,12 +157,12 @@ class DepartmentController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/|unique:departments,name,' . $id,
+            'name' => 'required|string|max:255|regex:/^[\pL\s]+$/u|unique:departments,name,' . $id,
         ], [
             'name.required' => 'The department name is required.',
             'name.unique' => 'This department name is already in use.',
             'name.max' => 'The department name must not exceed 255 characters.',
-            'name.regex' => 'The department name can only contain letters.'
+            'name.regex' => 'The department name can only contain letters and spaces.'
         ]);
 
         if ($validator->fails()) {
@@ -180,7 +184,7 @@ class DepartmentController extends Controller
 
     /**
      * Remove the specified department
-     *
+     * 
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
@@ -198,21 +202,21 @@ class DepartmentController extends Controller
         if ($department->employees()->exists()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Cannot delete department because it has associated employees'
+                'message' => 'Cannot delete department with associated employees'
             ], Response::HTTP_CONFLICT);
         }
 
         if ($department->documents()->exists()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Cannot delete department because it has associated documents'
+                'message' => 'Cannot delete department with associated documents'
             ], Response::HTTP_CONFLICT);
         }
 
         if ($department->originDerivations()->exists() || $department->destinationDerivations()->exists()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Cannot delete department because it has associated derivations'
+                'message' => 'Cannot delete department with associated derivations'
             ], Response::HTTP_CONFLICT);
         }
 

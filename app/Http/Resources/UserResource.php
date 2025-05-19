@@ -6,9 +6,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class UserResource extends JsonResource
-{
-    /**
+{    /**
      * Transform the resource into an array.
+     * 
+     * This resource converts a User model into a structured API response including roles, permissions, and employee information when available.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return array

@@ -16,70 +16,57 @@ class ChargeBookController extends Controller
 {
     /**
      * Get paginated list of charge books
+     * 
+     * This endpoint returns a paginated list of charge books for the authenticated user's department with optional filtering.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
     public function index(Request $request)
     {
-        // Get pagination parameters or use defaults
         $perPage = $request->query('per_page', 15);
         $page = $request->query('page', 1);
-        
-        // Get search/filter parameters
-        $search = $request->query('search');
-        $documentId = $request->query('document_id');
-        $senderUserId = $request->query('sender_user_id');
-        $receiverUserId = $request->query('receiver_user_id');
-        $dateFrom = $request->query('date_from');
-        $dateTo = $request->query('date_to');
-        
-        // Obtener el usuario autenticado y su departamento
         $user = Auth::user();
         $userDepartmentId = $user->employee->department_id;
-        
-        // Start the query
-        $query = ChargeBook::with(['document', 'senderDepartment', 'senderUser', 'receiverUser', 'department']);
-        
-        // Filtrar por departamento del usuario autenticado
-        $query->where('department_id', $userDepartmentId);
-        
-        // Apply filters if present
-        if ($search) {
-            $query->where(function($q) use ($search) {
-                $q->where('notes', 'LIKE', "%{$search}%")
-                  ->orWhere('registration_number', 'LIKE', "%{$search}%");
+
+        $query = ChargeBook::with(['document', 'senderDepartment', 'senderUser', 'receiverUser', 'department'])
+            ->where('department_id', $userDepartmentId);
+
+        // Apply filters
+        if ($request->filled('search')) {
+            $query->where(function($q) use ($request) {
+                $q->where('notes', 'LIKE', "%{$request->search}%")
+                  ->orWhere('registration_number', 'LIKE', "%{$request->search}%");
             });
         }
-        
-        if ($documentId) {
-            $query->where('document_id', $documentId);
+
+        if ($request->filled('document_id')) {
+            $query->where('document_id', $request->document_id);
         }
-        
-        if ($senderUserId) {
-            $query->where('sender_user_id', $senderUserId);
+
+        if ($request->filled('sender_user_id')) {
+            $query->where('sender_user_id', $request->sender_user_id);
         }
-        
-        if ($receiverUserId) {
-            $query->where('receiver_user_id', $receiverUserId);
+
+        if ($request->filled('receiver_user_id')) {
+            $query->where('receiver_user_id', $request->receiver_user_id);
         }
-        
-        if ($dateFrom) {
-            $query->whereDate('created_at', '>=', $dateFrom);
+
+        if ($request->filled('date_from') && $request->filled('date_to')) {
+            $query->whereBetween('created_at', [
+                Carbon::parse($request->date_from)->startOfDay(),
+                Carbon::parse($request->date_to)->endOfDay()
+            ]);
         }
-        
-        if ($dateTo) {
-            $query->whereDate('created_at', '<=', $dateTo);
-        }
-        
-        // Sort (optional)
+
+        // Sorting
         $sortBy = $request->query('sort_by', 'created_at');
         $sortDir = $request->query('sort_dir', 'desc');
         $query->orderBy($sortBy, $sortDir);
-        
-        // Execute the paginated query
+
         $chargeBooks = $query->paginate($perPage, ['*'], 'page', $page);
-          return response()->json([
+
+        return response()->json([
             'status' => 'success',
             'message' => 'Charge books list retrieved successfully',
             'data' => new ChargeBookCollection($chargeBooks),
@@ -96,26 +83,23 @@ class ChargeBookController extends Controller
                 'last' => $chargeBooks->url($chargeBooks->lastPage()),
                 'prev' => $chargeBooks->previousPageUrl(),
                 'next' => $chargeBooks->nextPageUrl(),
-            ],
+            ]
         ], Response::HTTP_OK);
     }
 
     /**
      * Get all charge books without pagination
-     *
+     * 
      * @return \Illuminate\Http\Response
      */
     public function getAll()
     {
-        // Obtener el usuario autenticado y su departamento
         $user = Auth::user();
-        $userDepartmentId = $user->employee->department_id;
-        
-        // Obtener charge books solo del departamento del usuario
         $chargeBooks = ChargeBook::with(['document', 'senderDepartment', 'senderUser', 'receiverUser', 'department'])
-            ->where('department_id', $userDepartmentId)
+            ->where('department_id', $user->employee->department_id)
             ->get();
-          return response()->json([
+
+        return response()->json([
             'status' => 'success',
             'message' => 'Complete list of charge books retrieved successfully',
             'data' => ChargeBookResource::collection($chargeBooks),
@@ -124,8 +108,8 @@ class ChargeBookController extends Controller
     }
 
     /**
-     * Store a newly created charge book
-     *
+     * Store a new charge book
+     * 
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
@@ -135,7 +119,7 @@ class ChargeBookController extends Controller
             'document_id' => 'required|exists:documents,id',
             'sender_department_id' => 'required|exists:departments,id',
             'sender_user_id' => 'required|exists:users,id',
-            'notes' => 'nullable|string|max:1000',
+            'notes' => 'nullable|string|max:1000'
         ]);
 
         if ($validator->fails()) {
@@ -146,29 +130,17 @@ class ChargeBookController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // Obtener el usuario autenticado
         $user = Auth::user();
-        $receiverUserId = $user->id;
-        $departmentId = $user->employee->department_id;
-        
-        if (!$departmentId) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'The authenticated user does not have an associated department'
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        // Create charge book
-        $chargeBook = new ChargeBook([
+        $chargeBook = ChargeBook::create([
             'document_id' => $request->document_id,
             'sender_department_id' => $request->sender_department_id,
             'sender_user_id' => $request->sender_user_id,
-            'receiver_user_id' => $receiverUserId,
-            'department_id' => $departmentId,
+            'receiver_user_id' => $user->id,
+            'department_id' => $user->employee->department_id,
             'notes' => $request->notes
         ]);
 
-        $chargeBook->save();        return response()->json([
+        return response()->json([
             'status' => 'success',
             'message' => 'Charge book created successfully',
             'data' => new ChargeBookResource($chargeBook)
@@ -176,33 +148,26 @@ class ChargeBookController extends Controller
     }
 
     /**
-     * Display the specified charge book
-     *
+     * Show specific charge book
+     * 
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
     public function show($id)
     {
-        $chargeBook = ChargeBook::with(['document', 'senderDepartment', 'senderUser', 'receiverUser', 'department'])->find($id);
+        $chargeBook = ChargeBook::with(['document', 'senderDepartment', 'senderUser', 'receiverUser', 'department'])
+            ->findOrFail($id);
 
-        if (!$chargeBook) {
+        $userDepartmentId = Auth::user()->employee->department_id;
+        
+        if ($chargeBook->department_id !== $userDepartmentId) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Charge book not found'
-            ], Response::HTTP_NOT_FOUND);
-        }
-        
-        // Verificar que el usuario pertenece al mismo departamento que el cargo book
-        $user = Auth::user();
-        $userDepartmentId = $user->employee->department_id;
-        
-        // Si el usuario no es del mismo departamento que el charge book
-        if ($chargeBook->department_id != $userDepartmentId) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'You do not have permission to view this charge book'
+                'message' => 'Unauthorized access to charge book'
             ], Response::HTTP_FORBIDDEN);
-        }        return response()->json([
+        }
+
+        return response()->json([
             'status' => 'success',
             'message' => 'Charge book retrieved successfully',
             'data' => new ChargeBookResource($chargeBook)
@@ -210,37 +175,26 @@ class ChargeBookController extends Controller
     }
 
     /**
-     * Update the specified charge book
-     *
+     * Update charge book notes
+     * 
      * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
     public function update(Request $request, $id)
     {
-        $chargeBook = ChargeBook::find($id);
+        $chargeBook = ChargeBook::findOrFail($id);
+        $userDepartmentId = Auth::user()->employee->department_id;
 
-        if (!$chargeBook) {
+        if ($chargeBook->department_id !== $userDepartmentId) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Charge book not found'
-            ], Response::HTTP_NOT_FOUND);
-        }
-        
-        // Verificar que el usuario pertenece al mismo departamento que el charge book
-        $user = Auth::user();
-        $userDepartmentId = $user->employee->department_id;
-        
-        // Si el usuario no es del mismo departamento que el charge book
-        if ($chargeBook->department_id != $userDepartmentId) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'You do not have permission to update this charge book'
+                'message' => 'Unauthorized update attempt'
             ], Response::HTTP_FORBIDDEN);
         }
 
         $validator = Validator::make($request->all(), [
-            'notes' => 'nullable|string|max:1000',
+            'notes' => 'nullable|string|max:1000'
         ]);
 
         if ($validator->fails()) {
@@ -251,12 +205,9 @@ class ChargeBookController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // Solo permitimos actualizar las notas del charge book
-        if ($request->has('notes')) {
-            $chargeBook->notes = $request->notes;
-        }
+        $chargeBook->update($request->only('notes'));
 
-        $chargeBook->save();        return response()->json([
+        return response()->json([
             'status' => 'success',
             'message' => 'Charge book updated successfully',
             'data' => new ChargeBookResource($chargeBook)
@@ -264,41 +215,27 @@ class ChargeBookController extends Controller
     }
 
     /**
-     * Remove the specified charge book
-     *
+     * Delete charge book
+     * 
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
     public function destroy($id)
     {
-        $chargeBook = ChargeBook::find($id);
+        $chargeBook = ChargeBook::findOrFail($id);
+        $userDepartmentId = Auth::user()->employee->department_id;
 
-        if (!$chargeBook) {
+        if ($chargeBook->department_id !== $userDepartmentId) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Charge book not found'
-            ], Response::HTTP_NOT_FOUND);
-        }
-        
-        // Verificar que el usuario pertenece al mismo departamento que el charge book
-        $user = Auth::user();
-        $userDepartmentId = $user->employee->department_id;
-        
-        // Si el usuario no es del mismo departamento que el charge book
-        if ($chargeBook->department_id != $userDepartmentId) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'You do not have permission to delete this charge book'
+                'message' => 'Unauthorized deletion attempt'
             ], Response::HTTP_FORBIDDEN);
-        }        // No permitimos eliminar charge books después de un cierto tiempo
-        $createdDate = Carbon::parse($chargeBook->created_at);
-        $now = Carbon::now();
-        $daysDifference = $createdDate->diffInDays($now);
+        }
 
-        if ($daysDifference > 1) {
+        if ($chargeBook->created_at->diffInHours() > 24) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Cannot delete charge book after 24 hours of creation'
+                'message' => 'Cannot delete charge book older than 24 hours'
             ], Response::HTTP_CONFLICT);
         }
 

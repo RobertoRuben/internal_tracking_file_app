@@ -14,8 +14,12 @@ use Illuminate\Support\Facades\Validator;
 class AuthController extends Controller
 {
     /**
-     * Iniciar sesión y crear token de acceso
+     * Login and create access token
+     * 
+     * This endpoint validates user credentials and returns an access token.
      *
+     * @unauthenticated
+     * 
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
@@ -25,26 +29,26 @@ class AuthController extends Controller
             'email' => 'required|string|email',
             'password' => 'required|string',
         ], [
-            'email.required' => 'El correo electrónico es obligatorio.',
-            'email.email' => 'El formato del correo electrónico no es válido.',
-            'password.required' => 'La contraseña es obligatoria.',
+            'email.required' => 'Email is required.',
+            'email.email' => 'Invalid email format.',
+            'password.required' => 'Password is required.',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Error de validación',
+                'message' => 'Validation error',
                 'errors' => $validator->errors()
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // Verificar si el usuario existe y las credenciales son correctas
+        // Verificar credenciales del usuario
         $user = User::where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Credenciales incorrectas'
+                'message' => 'Invalid credentials'
             ], Response::HTTP_UNAUTHORIZED);
         }
 
@@ -52,21 +56,23 @@ class AuthController extends Controller
         if (!$user->is_active) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Usuario deshabilitado. Contacte al administrador.'
+                'message' => 'User is disabled. Please contact the administrator.'
             ], Response::HTTP_FORBIDDEN);
-        }        // Cargar relaciones necesarias para la respuesta
+        }
+
+        // Cargar relaciones necesarias
         $user->load(['employee.department', 'roles', 'permissions']);
 
-        // Obtener todos los permisos del usuario (incluyendo los de sus roles)
+        // Obtener todos los permisos
         $allPermissions = $user->getAllPermissions()->pluck('name');
 
-        // Generar token con el nombre del dispositivo
+        // Generar token
         $deviceName = $request->input('device_name', 'API Token');
         $token = $user->createToken($deviceName, $allPermissions->toArray())->plainTextToken;
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Inicio de sesión exitoso',
+            'message' => 'Login successful',
             'data' => [
                 'user' => new UserResource($user),
                 'token' => $token,
@@ -77,42 +83,46 @@ class AuthController extends Controller
     }
 
     /**
-     * Cerrar sesión (revocar el token)
+     * Logout (revoke token)
+     * 
+     * This endpoint revokes the current user's access token.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
     public function logout(Request $request)
     {
-        // Revocar el token actual
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Sesión cerrada exitosamente'
+            'message' => 'Logged out successfully'
         ], Response::HTTP_OK);
     }
 
     /**
-     * Obtener datos del usuario autenticado
+     * Get authenticated user details
+     * 
+     * This endpoint returns the authenticated user's details including roles and permissions.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
     public function me(Request $request)
     {
-        // Cargar las relaciones necesarias
         $user = $request->user()->load(['employee.department', 'roles']);
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Datos del usuario recuperados exitosamente',
+            'message' => 'User details retrieved successfully',
             'data' => new UserResource($user)
         ], Response::HTTP_OK);
     }
 
     /**
-     * Cambiar la contraseña del usuario autenticado
+     * Change authenticated user's password
+     * 
+     * This endpoint allows the authenticated user to change their password.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
@@ -124,39 +134,37 @@ class AuthController extends Controller
             'new_password' => 'required|string|min:8|regex:/^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/',
             'new_password_confirmation' => 'required|same:new_password',
         ], [
-            'current_password.required' => 'La contraseña actual es obligatoria.',
-            'new_password.required' => 'La nueva contraseña es obligatoria.',
-            'new_password.min' => 'La nueva contraseña debe tener al menos 8 caracteres.',
-            'new_password.regex' => 'La nueva contraseña debe tener al menos 8 caracteres, una letra, un número y un carácter especial.',
-            'new_password_confirmation.required' => 'La confirmación de la nueva contraseña es obligatoria.',
-            'new_password_confirmation.same' => 'La confirmación de la nueva contraseña no coincide.',
+            'current_password.required' => 'Current password is required.',
+            'new_password.required' => 'New password is required.',
+            'new_password.min' => 'New password must be at least 8 characters.',
+            'new_password.regex' => 'New password must contain at least 8 characters, 1 letter, 1 number, and 1 special character.',
+            'new_password_confirmation.required' => 'Password confirmation is required.',
+            'new_password_confirmation.same' => 'Password confirmation does not match.',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Error de validación',
+                'message' => 'Validation error',
                 'errors' => $validator->errors()
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $user = $request->user();
 
-        // Verificar si la contraseña actual es correcta
         if (!Hash::check($request->current_password, $user->password)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'La contraseña actual es incorrecta'
+                'message' => 'Current password is incorrect'
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        // Actualizar la contraseña
         $user->password = Hash::make($request->new_password);
         $user->save();
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Contraseña actualizada exitosamente'
+            'message' => 'Password updated successfully'
         ], Response::HTTP_OK);
     }
 }

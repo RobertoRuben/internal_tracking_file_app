@@ -11,9 +11,11 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Validator;
 
 class EmployeeController extends Controller
-{    
+{
     /**
      * Get paginated list of employees
+     * 
+     * This endpoint returns a paginated list of employees with optional filtering.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
@@ -22,98 +24,76 @@ class EmployeeController extends Controller
     {
         $perPage = $request->query('per_page', 15);
         $page = $request->query('page', 1);
-        
-        $search = $request->query('search');
-        $department = $request->query('department_id');
-        $isActive = $request->has('is_active') ? $request->query('is_active') : null;
-        
-        $query = Employee::with('department');
-        
-        if ($search) {
-            $query->where(function($q) use ($search) {
-                $q->where('dni', 'LIKE', "%{$search}%")
-                  ->orWhere('names', 'LIKE', "%{$search}%")
-                  ->orWhere('paternal_surname', 'LIKE', "%{$search}%")
-                  ->orWhere('maternal_surname', 'LIKE', "%{$search}%")
-                  ->orWhere('phone_number', 'LIKE', "%{$search}%");
-            });
-        }
-        
-        if ($department) {
-            $query->where('department_id', $department);
-        }
-        
-        if ($isActive !== null) {
-            $query->where('is_active', $isActive === 'true' || $isActive === '1');
-        }
-        
-        $sortBy = $request->query('sort_by', 'id');
-        $sortDir = $request->query('sort_dir', 'desc');
-        $query->orderBy($sortBy, $sortDir);
-        
+
+        $query = Employee::with('department')
+            ->when($request->search, function ($q, $search) {
+                $q->where(function ($query) use ($search) {
+                    $query->where('dni', 'LIKE', "%{$search}%")
+                        ->orWhere('names', 'LIKE', "%{$search}%")
+                        ->orWhere('paternal_surname', 'LIKE', "%{$search}%")
+                        ->orWhere('maternal_surname', 'LIKE', "%{$search}%")
+                        ->orWhere('phone_number', 'LIKE', "%{$search}%");
+                });
+            })
+            ->when($request->department_id, function ($q, $departmentId) {
+                $q->where('department_id', $departmentId);
+            })
+            ->when($request->has('is_active'), function ($q) use ($request) {
+                $q->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
+            })
+            ->orderBy($request->query('sort_by', 'id'), $request->query('sort_dir', 'desc'));
+
         $employees = $query->paginate($perPage, ['*'], 'page', $page);
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Employees list retrieved successfully',
             'data' => new EmployeeCollection($employees),
-            'meta' => [
-                'current_page' => $employees->currentPage(),
-                'from' => $employees->firstItem(),
-                'last_page' => $employees->lastPage(),
-                'per_page' => $employees->perPage(),
-                'to' => $employees->lastItem(),
-                'total' => $employees->total(),
-            ],
-            'links' => [
-                'first' => $employees->url(1),
-                'last' => $employees->url($employees->lastPage()),
-                'prev' => $employees->previousPageUrl(),
-                'next' => $employees->nextPageUrl(),
-            ],
+            'meta' => $this->buildPaginationMeta($employees),
+            'links' => $this->buildPaginationLinks($employees)
         ], Response::HTTP_OK);
     }
 
     /**
      * Get all employees without pagination
-     *
+     * 
      * @return \Illuminate\Http\Response
      */
     public function getAll()
     {
         $employees = Employee::with('department')->get();
-        
+
         return response()->json([
             'status' => 'success',
-            'message' => 'Complete list of employees retrieved successfully',
+            'message' => 'Complete employee list retrieved',
             'data' => EmployeeResource::collection($employees),
-            'total' => $employees->count()
+            'count' => $employees->count()
         ], Response::HTTP_OK);
     }
 
     /**
-     * Store a newly created employee
-     *
+     * Create new employee
+     * 
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'dni' => 'required|unique:employees,dni|numeric|digits:8',
-            'names' => 'required|string|min:3|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/',
-            'paternal_surname' => 'required|string|min:3|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/',
-            'maternal_surname' => 'required|string|min:3|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/',
+            'dni' => 'required|unique:employees,dni|digits:8|numeric',
+            'names' => 'required|string|min:3|max:255|regex:/^[\pL\s]+$/u',
+            'paternal_surname' => 'required|string|min:3|max:255|regex:/^[\pL\s]+$/u',
+            'maternal_surname' => 'required|string|min:3|max:255|regex:/^[\pL\s]+$/u',
             'gender' => 'required|in:M,F',
-            'phone_number' => 'nullable|numeric|digits:9|regex:/^9\d{8}$/',
-            'is_active' => 'boolean',
-            'department_id' => 'required|exists:departments,id',
-        ]);
+            'phone_number' => 'nullable|digits:9|numeric|regex:/^9\d{8}$/',
+            'is_active' => 'sometimes|boolean',
+            'department_id' => 'required|exists:departments,id'
+        ], $this->validationMessages());
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Validation error',
+                'message' => 'Validation failed',
                 'errors' => $validator->errors()
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -128,8 +108,8 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Display the specified employee
-     *
+     * Get specific employee details
+     * 
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
@@ -146,14 +126,14 @@ class EmployeeController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Employee retrieved successfully',
+            'message' => 'Employee details retrieved',
             'data' => new EmployeeResource($employee)
         ], Response::HTTP_OK);
     }
 
     /**
-     * Update the specified employee
-     *
+     * Update employee
+     * 
      * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
@@ -170,20 +150,20 @@ class EmployeeController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'dni' => 'sometimes|required|numeric|digits:8|unique:employees,dni,' . $id,
-            'names' => 'sometimes|required|string|min:3|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/',
-            'paternal_surname' => 'sometimes|required|string|min:3|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/',
-            'maternal_surname' => 'sometimes|required|string|min:3|max:255|regex:/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/',
+            'dni' => 'sometimes|required|digits:8|numeric|unique:employees,dni,' . $id,
+            'names' => 'sometimes|required|string|min:3|max:255|regex:/^[\pL\s]+$/u',
+            'paternal_surname' => 'sometimes|required|string|min:3|max:255|regex:/^[\pL\s]+$/u',
+            'maternal_surname' => 'sometimes|required|string|min:3|max:255|regex:/^[\pL\s]+$/u',
             'gender' => 'sometimes|required|in:M,F',
-            'phone_number' => 'nullable|numeric|digits:9|regex:/^9\d{8}$/',
+            'phone_number' => 'nullable|digits:9|numeric|regex:/^9\d{8}$/',
             'is_active' => 'sometimes|boolean',
-            'department_id' => 'sometimes|required|exists:departments,id',
-        ]);
+            'department_id' => 'sometimes|required|exists:departments,id'
+        ], $this->validationMessages());
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Validation error',
+                'message' => 'Validation failed',
                 'errors' => $validator->errors()
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -198,14 +178,14 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Remove the specified employee
-     *
+     * Delete employee
+     * 
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
     public function destroy($id)
     {
-        $employee = Employee::find($id);
+        $employee = Employee::with('user')->find($id);
 
         if (!$employee) {
             return response()->json([
@@ -214,10 +194,10 @@ class EmployeeController extends Controller
             ], Response::HTTP_NOT_FOUND);
         }
 
-        if ($employee->user()->exists()) {
+        if ($employee->user) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Cannot delete employee because it has an associated user'
+                'message' => 'Cannot delete employee with associated user account'
             ], Response::HTTP_CONFLICT);
         }
 
@@ -227,5 +207,50 @@ class EmployeeController extends Controller
             'status' => 'success',
             'message' => 'Employee deleted successfully'
         ], Response::HTTP_OK);
+    }
+
+    /**
+     * Build pagination metadata
+     */
+    private function buildPaginationMeta($paginator)
+    {
+        return [
+            'current_page' => $paginator->currentPage(),
+            'from' => $paginator->firstItem(),
+            'last_page' => $paginator->lastPage(),
+            'per_page' => $paginator->perPage(),
+            'to' => $paginator->lastItem(),
+            'total' => $paginator->total(),
+        ];
+    }
+
+    /**
+     * Build pagination links
+     */
+    private function buildPaginationLinks($paginator)
+    {
+        return [
+            'first' => $paginator->url(1),
+            'last' => $paginator->url($paginator->lastPage()),
+            'prev' => $paginator->previousPageUrl(),
+            'next' => $paginator->nextPageUrl(),
+        ];
+    }
+
+    /**
+     * Validation messages
+     */
+    private function validationMessages()
+    {
+        return [
+            'dni.required' => 'DNI is required',
+            'dni.unique' => 'DNI already registered',
+            'dni.digits' => 'DNI must have 8 digits',
+            'names.regex' => 'Names can only contain letters and spaces',
+            'paternal_surname.regex' => 'Paternal surname can only contain letters and spaces',
+            'maternal_surname.regex' => 'Maternal surname can only contain letters and spaces',
+            'phone_number.regex' => 'Phone number must start with 9 and have 9 digits',
+            'department_id.exists' => 'Selected department does not exist'
+        ];
     }
 }
