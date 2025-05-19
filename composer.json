@@ -7,6 +7,7 @@
     "require": {
         "php": "^8.1",
         "bezhansalleh/filament-shield": "^3.3",
+        "dedoc/scramble": "^0.12.19",
         "filament/filament": "3.3",
         "flowframe/laravel-trend": "*",
         "guzzlehttp/guzzle": "^7.2",
