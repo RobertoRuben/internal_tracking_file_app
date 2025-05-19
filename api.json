@@ -10,6 +10,11 @@
             "url": "http://127.0.0.1:8000/api"
         }
     ],
+    "security": [
+        {
+            "http": []
+        }
+    ],
     "paths": {
         "/v1/auth/login": {
             "post": {
@@ -4513,6 +4518,13 @@
         }
     },
     "components": {
+        "securitySchemes": {
+            "http": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            }
+        },
         "schemas": {
             "ChargeBookCollection": {
                 "type": "object",
