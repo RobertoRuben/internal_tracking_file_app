@@ -3,11 +3,16 @@
     "info": {
         "title": "DocTrack",
         "version": "1.0.0",
-        "description": "This documentation provides information about the Internal Tracking Documents Application API. The API allows you to manage employees, departments, documents, derivations, charge books, and users."
+        "description": "# DocTrack API Documentation\n\n## Overview\nThis documentation provides comprehensive information about the Internal Document Tracking Application API (DocTrack). \nDocTrack is a robust system designed to streamline the management of internal documents, their tracking, and the workflow between different departments within an organization.\n\n## Core Features\n- **Authentication**: Secure user authentication with role-based access control\n- **Document Management**: Create, update, track, and manage internal documents\n- **Derivation System**: Forward documents between departments with full tracking history\n- **Department Organization**: Manage organizational structure and department hierarchies\n- **Employee Management**: Maintain employee records and their departmental associations\n- **Charge Books**: Track document reception and responsibility assignments\n\n## API Structure\nAll API endpoints are organized under the `/api/v1` path and grouped by resource types:\n- `/auth` - Authentication and user management\n- `/documents` - Document operations\n- `/derivations` - Document routing between departments\n- `/departments` - Department management\n- `/employees` - Employee records \n- `/charge-books` - Document reception tracking\n- `/users` - User administration\n\n## Getting Started\n1. Authenticate using the `/v1/auth/login` endpoint\n2. Use the returned JWT token in the Authorization header for subsequent requests\n3. Explore the different endpoints based on your requirements\n\nFor technical support or questions about the API, please contact our support team."
     },
     "servers": [
         {
-            "url": "http://127.0.0.1:8000/api"
+            "url": "http://127.0.0.1:8000/api",
+            "description": "Development"
+        },
+        {
+            "url": "http://192.168.1.179:8081/api",
+            "description": "Production"
         }
     ],
     "security": [

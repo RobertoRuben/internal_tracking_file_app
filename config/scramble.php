@@ -29,9 +29,38 @@ return [
         /*
          * Description rendered on the home page of the API documentation (`/docs/api`).
          */
-        'description' => 'This documentation provides information about the Internal Tracking Documents Application API. The API allows you to manage employees, departments, documents, derivations, charge books, and users.',
+        'description' => '# DocTrack API Documentation
+
+## Overview
+This documentation provides comprehensive information about the Internal Document Tracking Application API (DocTrack). 
+DocTrack is a robust system designed to streamline the management of internal documents, their tracking, and the workflow between different departments within an organization.
+
+## Core Features
+- **Authentication**: Secure user authentication with role-based access control
+- **Document Management**: Create, update, track, and manage internal documents
+- **Derivation System**: Forward documents between departments with full tracking history
+- **Department Organization**: Manage organizational structure and department hierarchies
+- **Employee Management**: Maintain employee records and their departmental associations
+- **Charge Books**: Track document reception and responsibility assignments
+
+## API Structure
+All API endpoints are organized under the `/api/v1` path and grouped by resource types:
+- `/auth` - Authentication and user management
+- `/documents` - Document operations
+- `/derivations` - Document routing between departments
+- `/departments` - Department management
+- `/employees` - Employee records 
+- `/charge-books` - Document reception tracking
+- `/users` - User administration
+
+## Getting Started
+1. Authenticate using the `/v1/auth/login` endpoint
+2. Use the returned JWT token in the Authorization header for subsequent requests
+3. Explore the different endpoints based on your requirements
+
+For technical support or questions about the API, please contact our support team.',
         
-        'title' => 'Internal Document Tracking API',
+        'title' => 'DocTrack - Internal Document Tracking API',
         
         'contact' => [
             'name' => 'API Support',
@@ -51,7 +80,7 @@ return [
         /*
          * Define the theme of the documentation. Available options are `light` and `dark`.
          */
-        'theme' => 'light',
+        'theme' => 'dark',
 
         /*
          * Hide the `Try It` feature. Enabled by default.
@@ -96,7 +125,10 @@ return [
      * ],
      * ```
      */
-    'servers' => null,
+    'servers' => [
+        'Development' => 'http://127.0.0.1:8000/api',
+        'Production' => 'http://192.168.1.179:8081/api',
+    ],
 
     /**
      * Determines how Scramble stores the descriptions of enum cases.
@@ -110,7 +142,7 @@ return [
     'enum_cases_description_strategy' => 'description',
 
     'middleware' => [
-        // Elimina el middleware web y RestrictedDocsAccess para hacer la documentación accesible sin autenticación
+
     ],
 
     'extensions' => [],
@@ -120,6 +152,7 @@ return [
             'type' => 'http',
             'scheme' => 'bearer',
             'bearerFormat' => 'JWT',
+            'description' => 'Use a JWT token obtained from the login endpoint. Format: Bearer {token}',
         ],
     ],
 ];
