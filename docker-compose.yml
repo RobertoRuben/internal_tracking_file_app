@@ -2,25 +2,28 @@ version: '3'
 services:
   app:
     container_name: doctrack-app
-    image: betoooo/doctrack:v1.0.0 
+    image: betoooo/doctrack:v1.0.1 
     restart: unless-stopped
-    ports:
-      - "8081:8081" 
+    network_mode: "host" 
     volumes:
-      - ./storage:/var/www/html/storage
+      - ./storage/app:/var/www/html/storage/app
+      - ./storage/framework/cache:/var/www/html/storage/framework/cache
+      - ./storage/framework/sessions:/var/www/html/storage/framework/sessions
+      - ./storage/framework/views:/var/www/html/storage/framework/views
+      - ./storage/logs:/var/www/html/storage/logs
       - ./bootstrap/cache:/var/www/html/bootstrap/cache  
     environment:
       - APP_NAME=DocTrack
       - APP_ENV=local
-      - APP_KEY=base64:HN3HX+lGSS6xFiq7c+wxZMsOVdFgyXn3hGur/sH3GPg=
+      - APP_KEY=
       - APP_DEBUG=false
-      - APP_URL=http://192.168.1.179
-      - DB_CONNECTION=pgsql
-      - DB_HOST=192.168.1.35  
-      - DB_PORT=5432
-      - DB_DATABASE=internal_tracking_db
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=MDA_TecInfo@2024
+      - APP_URL=
+      - DB_CONNECTION=
+      - DB_HOST=
+      - DB_PORT=
+      - DB_DATABASE=
+      - DB_USERNAME=
+      - DB_PASSWORD=
       - BROADCAST_DRIVER=log
       - CACHE_DRIVER=file
       - FILESYSTEM_DISK=local
