@@ -95,6 +95,19 @@ class UserResource extends Resource
                             ->maxLength(255),
                     ]),
 
+                Forms\Components\Section::make('Roles y Permisos')
+                    ->description('Asignación de roles al usuario')
+                    ->icon('heroicon-o-shield-check')
+                    ->schema([
+                        Forms\Components\Select::make('roles')
+                            ->label('Roles')
+                            ->relationship('roles', 'name')
+                            ->multiple()
+                            ->preload()
+                            ->searchable()
+                            ->helperText('Seleccione los roles que tendrá este usuario'),
+                    ]),
+
                 Forms\Components\Section::make('Configuración')
                     ->description('Opciones y preferencias del usuario')
                     ->icon('heroicon-o-cog-6-tooth')
@@ -150,6 +163,11 @@ class UserResource extends Resource
                     })
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('roles.name')
+                    ->label('Roles')
+                    ->badge()
+                    ->color('primary')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Fecha de creación')
                     ->dateTime('d/m/Y H:i')

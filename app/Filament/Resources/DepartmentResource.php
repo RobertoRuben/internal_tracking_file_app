@@ -124,4 +124,9 @@ class DepartmentResource extends Resource
             'view' => Pages\ViewDepartment::route('/{record}'),
         ];
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_department');
+    }
 }

@@ -315,4 +315,9 @@ class ChargeBookResource extends Resource
         
         return $query;
     }
+    
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_charge_book');
+    }
 }

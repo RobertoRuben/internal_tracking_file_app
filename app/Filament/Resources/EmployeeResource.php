@@ -292,4 +292,9 @@ class EmployeeResource extends Resource
             'view' => Pages\ViewEmployee::route('/{record}'),
         ];
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_employee');
+    }
 }
