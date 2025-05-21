@@ -1,0 +1,38 @@
+version: '3'
+services:
+  app:
+    container_name: doctrack-app
+    image: betoooo/doctrack:v1.0.1 
+    restart: unless-stopped
+    network_mode: "host" 
+    volumes:
+      - ./storage/app:/var/www/html/storage/app
+      - ./storage/framework/cache:/var/www/html/storage/framework/cache
+      - ./storage/framework/sessions:/var/www/html/storage/framework/sessions
+      - ./storage/framework/views:/var/www/html/storage/framework/views
+      - ./storage/logs:/var/www/html/storage/logs
+      - ./bootstrap/cache:/var/www/html/bootstrap/cache  
+    environment:
+      - APP_NAME=DocTrack
+      - APP_ENV=local
+      - APP_KEY=
+      - APP_DEBUG=false
+      - APP_URL=
+      - DB_CONNECTION=
+      - DB_HOST=
+      - DB_PORT=
+      - DB_DATABASE=
+      - DB_USERNAME=
+      - DB_PASSWORD=
+      - BROADCAST_DRIVER=log
+      - CACHE_DRIVER=file
+      - FILESYSTEM_DISK=local
+      - QUEUE_CONNECTION=sync
+      - SESSION_DRIVER=file
+      - SESSION_LIFETIME=120
+    networks:
+      - doctrack-network
+
+networks:
+  doctrack-network:
+    driver: bridge
